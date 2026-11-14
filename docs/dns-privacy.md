@@ -17,3 +17,34 @@ Resolver outage must not authorize client physical DNS. Standard clients lack
 that enforcement; the required strict integration is not yet implemented.
 The upstream resolver sees requested names; external logging cannot be controlled.
 See the [official Unbound configuration reference](https://unbound.docs.nlnetlabs.nl/en/latest/manpages/unbound.conf.html).
+
+## Optional Pi-hole after the core VPN
+
+Mistborn's gateway and convenient device enrollment are design inspiration; no
+code or service stack is imported. The current build deliberately has no Pi-hole
+dependency. Finish safe gateway activation, live revocation, strict client policy
+and actual VM packet/no-log tests first.
+
+The proposed later path is client → WireGuard → VPN-only Pi-hole → local Unbound
+→ authenticated DoT upstream. Pi-hole would add blocking; it would not add
+client-to-server transport encryption, which WireGuard already provides. The
+client and server resolver still know the query; encryption does not hide it
+from those endpoints. HTTPS application content has a separate protection scope.
+
+The [Pi-hole FTL configuration reference](https://docs.pi-hole.net/ftldns/configfile/)
+checked 2026-11-14 documents query logging, long-term query retention and separate
+log destinations. Its defaults do not satisfy Shadowborn's policy. A future
+version-specific adapter must set `dns.queryLogging=false`, `database.maxDBdays=0`,
+`database.DBimport=false` and `misc.privacylevel=3`, and independently disable
+network/client inventory, query analysis, packet capture, diagnostic logs,
+web access logs and every debug output path. These are design requirements,
+**not a validated configuration**; four settings alone do not certify compliance.
+
+Before integration, test synthetic traffic, failure, restart and reboot against
+the exact packaged version. Inspect disk, journal, API/history responses and
+shared-memory behavior; verify no query/client/connection history is retained.
+Keep persistent blocklist/configuration data separate from forbidden activity
+records. Limit listener access to authorized tunnel peers, avoid resolver loops,
+and expose no public dashboard. If any activity sink cannot be disabled, do not
+ship the integration. Current Pi-hole integration/compliance: **NOT IMPLEMENTED /
+UNKNOWN**. Disabling statistics means losing the usual per-client query charts.

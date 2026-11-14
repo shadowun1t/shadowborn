@@ -62,6 +62,7 @@ best effort until their behavior has been tested.
 | **Server configuration** | Validated TOML and generated WireGuard, nftables, Unbound, forwarding and systemd configuration. |
 | **Device authorization** | Individual public keys, unique tunnel IPv4 addresses, per-device preshared keys, and active/disabled/revoked states. |
 | **Client profiles** | Templates for device-generated private keys, or an explicitly requested server-generated profile encrypted with age. |
+| **Quick preparation and QR** | `setup` prepares a new server and first device; encrypted PNG QR and `.conf` exports contain the same per-device credentials. |
 | **Server isolation** | Generated rules restrict peer sources, deny peer-to-peer and private-network forwarding, block cloud metadata access, and scope NAT to the selected WAN. |
 | **DNS configuration** | A tunnel-bound resolver with pinned Quad9 DoT upstreams and plaintext upstream fallback disabled. |
 | **Protected state** | Private files, exclusive locks, atomic writes, ownership checks and redacted diagnostics. |
@@ -78,6 +79,12 @@ Routed IPv6 egress and persistent client protection remain unfinished. A standar
 profile does not guarantee that traffic stays blocked when the tunnel is down.
 
 ## Getting started
+
+For a fresh VM and a phone, start with the [server + QR walkthrough](docs/quickstart-qr.md).
+`shadowborn setup --help` lists the endpoint, WAN and SSH allowlist inputs.
+Preparation produces private server files and encrypted client imports; it does
+not activate networking. A QR is a secret credential and is decrypted/viewed only
+on the operator's trusted computer, never printed to the server terminal.
 
 Build with Rust/Cargo and a C linker. The packaging scripts also require Python 3.
 Run the following from the repository root:
@@ -98,7 +105,7 @@ configuration. The example contains documentation IP addresses: replace the
 endpoint, WAN interface and administrator CIDR before provisioning your server.
 
 The server runtime uses `wireguard-tools`, nftables, Unbound, CA certificates and
-systemd; encrypted exports and backups use age. The
+systemd; encrypted exports and backups use age; QR exports use qrencode. The
 [installation guide](docs/installation-server.md) covers dependencies, private
 state initialization, console access, configuration review and manual VM activation.
 
@@ -125,6 +132,7 @@ before using the profile on a working workstation.
 | Task | Command |
 | --- | --- |
 | Inspect prerequisites | `shadowborn doctor` |
+| Prepare a fresh gateway and first device | `shadowborn setup --help` (see the [QR walkthrough](docs/quickstart-qr.md)) |
 | Validate server configuration | `shadowborn validate` |
 | Review a configuration plan | `shadowborn plan --json` |
 | Initialize private gateway state | `sudo shadowborn init` |
@@ -167,6 +175,10 @@ the device in the preferred enrollment flow. The optional `peer issue` flow
 requires explicit consent to generate a client key on the server and encrypts the
 result to an operator-supplied age recipient. Backups contain necessary secrets
 and authorization records, so their custody and retention matter too.
+
+Optional `peer issue --qr-bundle PATH.png.age` also exports an encrypted QR of the
+same profile. The client private key is absent from persistent authorization
+state. A new device requires a separate peer and QR; sharing a QR shares access.
 
 WireGuard protects the device-to-VPS connection. The local network and ISP can
 still observe the VPN endpoint and traffic timing; the VPS provider can observe
@@ -212,6 +224,7 @@ an older installation.
 | Guide | Contents |
 | --- | --- |
 | [Server setup](docs/installation-server.md) | Fresh VM preparation, dependencies and manual activation. |
+| [Server + QR walkthrough](docs/quickstart-qr.md) | Prepare a gateway and first device, decrypt locally and scan. |
 | [Client enrollment](docs/client-enrollment.md) | Device keys, secure profile transfer and standard WireGuard import. |
 | [DNS privacy](docs/dns-privacy.md) | Resolver configuration, encrypted upstreams and validation limits. |
 | [Client protection](docs/client-kill-switch.md) | Requirements for the unfinished persistent strict mode. |

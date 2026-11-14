@@ -1,4 +1,38 @@
-# Shadowborn validation — 2026-10-30
+# Shadowborn validation
+
+## Continuation validation — 2026-11-14
+
+Starting checkout `b7e5057` was clean. Environment: Kali x86_64, kernel
+`7.2.15+kali-amd64`, Rust 1.97.1, ordinary user. The pre-change workspace tests
+passed (66). No installed workstation service, route, firewall, DNS or legacy
+client state was changed. Privileged CLI checks ran inside disposable
+chroot/user/network namespaces; real WG traffic used synthetic namespace peers.
+
+| Check | Result / scope |
+| --- | --- |
+| `scripts/validate.sh` | PASS: formatting, Clippy with warnings denied, 67 workspace tests, release build, package/provisioning/configuration checks and 10 legacy integration checks. |
+| `setup` and QR enrollment | PASS: dry-run without writes; explicit key-generation opt-in; encrypted profile/PNG, unique peer keys, no client private key in state, 0700/0600 permissions, deployed-host refusal. |
+| Failure paths | PASS: missing encoder, occupied export, duplicate identity/output and invalid inputs fail; authorization is unchanged and newly created artifacts are cleaned on tested failures. |
+| Independent QR decoder | PASS: qrencode 4.1.1 → age 1.3.2 → ZBar 0.23.93 returns the complete profile byte-for-byte; no QR/profile/key echoed to terminal. |
+| Generated Unbound/systemd | PASS: Unbound 1.26.2 syntax and systemd unit verification; extracted executable paths relocated for checking. |
+| Isolated kernel WG regression | PASS: handshake, generated firewall, scoped NAT/return, host/metadata/spoofed-source denial, traffic stops on explicit kernel peer removal. |
+| ShellCheck and diff whitespace | PASS: ShellCheck 0.11.0 on repository shell scripts; `git diff --check`. |
+| Actual phone scan/import | NOT TESTED: independent decoding does not certify Android/iOS app compatibility. |
+| Runtime no-log policy, real Internet/DoT, VM boot, SSH recovery, strict client | UNKNOWN / NOT TESTED; earlier release gates remain open. |
+| Pi-hole | NOT IMPLEMENTED; no runtime compliance claim. |
+
+Missing local tools were downloaded from the configured distro repository and
+extracted under a private temporary directory, not installed on the host. Test
+overrides: `SHADOWBORN_AGE`, `SHADOWBORN_AGE_KEYGEN`, `SHADOWBORN_ZBARIMG`,
+`SHADOWBORN_UNBOUND`, `SHADOWBORN_UNBOUND_CHECKCONF`; these relocate tools for the
+tests only. The production executable uses fixed system-tool paths. CI now
+installs qrencode and zbar-tools for these checks. No CI run is claimed here.
+
+Reproduce with `scripts/validate.sh`, `python3 tests/namespaces/shadowborn.py`,
+`shellcheck scripts/*.sh` and `git diff --check` after installing the documented
+test prerequisites. Real service no-log compliance is still **UNKNOWN**.
+
+## Previous baseline — 2026-10-30
 
 Baseline: clean tracked checkout e06bf37; four legacy crates, no server code.
 Environment: Kali x86_64, Rust/Cargo 1.97.1; ordinary user. No developer-host

@@ -346,6 +346,7 @@ dependencies = [
  "serde_json",
  "shadowborn-core",
  "shadowborn-platform",
+ "toml",
 ]
 
 [[package]]

@@ -211,12 +211,23 @@ forward-zone:
     ))
 }
 pub fn client_template(state: &State, name: &str) -> Result<String> {
+    Ok(format!("# STANDARD profile; strict kill switch is NOT installed.\n# Replace PrivateKey locally; protect this PSK-bearing template as a secret.\n# IPv6 is routed into the tunnel and dropped at the IPv4-only server.\n{}", client_config(state, name, "<DEVICE_PRIVATE_KEY>")?))
+}
+
+/// Compact, complete profile for standard file import and QR encoding.
+/// The caller must protect the returned secret; it must never be printed.
+pub fn client_profile(state: &State, name: &str, private: &crate::Secret) -> Result<String> {
+    crate::validate_key(private.expose())?;
+    client_config(state, name, private.expose())
+}
+
+fn client_config(state: &State, name: &str, private: &str) -> Result<String> {
     state.validate()?;
     let peer = state.peer(name)?;
     if peer.status != PeerStatus::Active {
         bail!("client export requires an active peer")
     }
-    Ok(format!("# STANDARD profile; strict kill switch is NOT installed.\n# Replace PrivateKey locally; protect this PSK-bearing template as a secret.\n# IPv6 is routed into the tunnel and dropped at the IPv4-only server.\n[Interface]\nPrivateKey = <DEVICE_PRIVATE_KEY>\nAddress = {}/32\nDNS = {}\n\n[Peer]\nPublicKey = {}\nPresharedKey = {}\nEndpoint = {}:{}\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n",peer.address,state.config.prefix()?.address,state.server_public_key,peer.psk.as_ref().ok_or_else(||anyhow::anyhow!("missing PSK"))?.expose(),state.config.server.endpoint,state.config.server.listen_port))
+    Ok(format!("[Interface]\nPrivateKey = {private}\nAddress = {}/32\nDNS = {}\n\n[Peer]\nPublicKey = {}\nPresharedKey = {}\nEndpoint = {}:{}\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n",peer.address,state.config.prefix()?.address,state.server_public_key,peer.psk.as_ref().ok_or_else(||anyhow::anyhow!("missing PSK"))?.expose(),state.config.server.endpoint,state.config.server.listen_port))
 }
 pub fn bundle(state: &State) -> Result<BTreeMap<String, String>> {
     state.validate()?;

@@ -1,8 +1,10 @@
 //! File-only provisioning boundary; live network activation is intentionally gated.
 mod command;
+mod enrollment;
 mod storage;
 use anyhow::{bail, Result};
 pub use command::*;
+pub use enrollment::*;
 use shadowborn_core::Config;
 use std::path::Path;
 pub use storage::*;

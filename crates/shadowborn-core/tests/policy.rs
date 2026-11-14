@@ -190,3 +190,23 @@ fn state_rejects_added_history_and_corrupt_address_assignments() {
     value["handshake_history"] = serde_json::json!([]);
     assert!(serde_json::from_value::<State>(value).is_err());
 }
+
+#[test]
+fn complete_import_keeps_device_secrets_out_of_authorization_state() {
+    let mut state = fixture();
+    state
+        .add("phone".into(), key('D'), Secret::new(key('E')).unwrap())
+        .unwrap();
+    let private = Secret::new(key('F')).unwrap();
+    let profile = client_profile(&state, "phone", &private).unwrap();
+    assert!(profile.contains(private.expose()));
+    assert!(!profile.contains("<DEVICE_PRIVATE_KEY>"));
+    assert!(!profile.contains(state.server_private_key.expose()));
+    assert!(!serde_json::to_string(&state)
+        .unwrap()
+        .contains(private.expose()));
+    state.disable("phone", false).unwrap();
+    assert!(client_profile(&state, "phone", &private).is_err());
+    state.disable("phone", true).unwrap();
+    assert!(client_profile(&state, "phone", &private).is_err());
+}

@@ -19,6 +19,15 @@ secrets and authorization inventory, never traffic. The operator controls backup
 retention and must retire outdated exported profiles/bundles. Memory buffers are
 not guaranteed to be securely erased; no SSD erasure promise is made.
 
+Convenience enrollment and `setup` generate a device key in server memory only
+after explicit opt-in. Its importable profile and optional PNG QR are encrypted
+with age before file creation. Neither plaintext keys/QRs nor device private keys
+are saved in authorization state, stdout/stderr, subprocess arguments or service
+logs. These encrypted credentials are configuration/security artifacts, not
+activity records. The QR viewer/client OS and operator-managed decrypted copies
+are outside the server policy; avoid screenshots, browser upload and thumbnail
+history. Encryption at rest is not proof of memory/swap erasure.
+
 Generated Unbound disables query/reply/SERVFAIL logs, syslog and periodic
 statistics; no cache-dump or remote-control service is enabled. Its volatile
 cache necessarily holds current DNS data in RAM. Service stdout/stderr are null

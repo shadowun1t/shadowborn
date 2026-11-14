@@ -1,5 +1,9 @@
 # Client enrollment
 
+For the convenience flow with a new server and first device, see the
+[server + QR walkthrough](quickstart-qr.md). It prepares files without activating
+networking. Device-generated keys below remain the preferred custody model.
+
 Preferred flow: create keys on the device, send only its public key over an
 already authenticated administrator channel. Never share device private keys.
 On a standard Linux client with wireguard-tools:
@@ -30,6 +34,30 @@ This explicitly creates the client private key in server memory and immediately
 encrypts the profile to a native age recipient. No plaintext convenience artifact
 is written. Decrypt locally using the matching age identity into a 0600 file.
 This does not provide the preferred device-only key custody.
+
+To also create a scannable QR, install the distro's `qrencode` package and use:
+
+```bash
+sudo shadowborn peer issue --name phone --recipient AGE_PUBLIC_RECIPIENT \
+  --bundle /root/phone.conf.age --qr-bundle /root/phone.png.age \
+  --accept-server-key-generation
+```
+
+The profile and PNG are independently age-encrypted to the same recipient, with
+identical credentials. Secret input reaches qrencode through stdin; its image
+output stays in memory until encrypted. Neither plaintext export is written to
+disk or printed. Failed exports do not save a new authorization; existing files
+are never overwritten. An interruption can leave encrypted incomplete artifacts;
+inspect current peer state and retire unused artifacts before retrying. Client
+private keys are not retained in authorization state, so QR regeneration from
+that state is deliberately unavailable. Keep the encrypted original as needed.
+
+For a gateway prepared with `setup`, add `--state-dir /root/shadowborn-prepared/state`
+to the command. All enrollment remains offline: add devices and render a fresh
+server bundle **before** activation. Follow the walkthrough to transfer, decrypt
+and display the QR locally, then scan in a standard WireGuard app. No web
+dashboard or shareable enrollment token is involved. Phone app acceptance is
+NOT TESTED; independent QR decode checks are not a substitute for that test.
 
 On a separate, explicitly approved client VM:
 

@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+mod setup;
 use clap::{Parser, Subcommand};
 use shadowborn_core::{Config, PeerStatus, State};
 use shadowborn_platform as platform;
@@ -26,6 +27,8 @@ enum Commands {
     Version,
     Doctor,
     Validate,
+    /// File-only wizard for a fresh gateway using baseline defaults.
+    Setup(setup::Setup),
     Init {
         #[arg(long)]
         dry_run: bool,
@@ -117,6 +120,9 @@ enum PeerCommand {
         recipient: String,
         #[arg(long)]
         bundle: PathBuf,
+        /// Optional PNG QR encrypted to the same age recipient; never printed.
+        #[arg(long)]
+        qr_bundle: Option<PathBuf>,
         #[arg(long)]
         accept_server_key_generation: bool,
     },
@@ -227,7 +233,7 @@ fn peer_command(cli: &Cli, cmd: &PeerCommand) -> Result<()> {
             let before = store.load()?;
             platform::require_offline(&before.config)?;
             let mut after = before.clone();
-            let mut artifact: Option<&Path> = None;
+            let mut artifacts: Vec<&Path> = Vec::new();
             match cmd {
                 PeerCommand::Add { name, public_key } => after.add(
                     name.clone(),
@@ -238,22 +244,23 @@ fn peer_command(cli: &Cli, cmd: &PeerCommand) -> Result<()> {
                     name,
                     recipient,
                     bundle,
+                    qr_bundle,
                     accept_server_key_generation,
                 } => {
                     if !accept_server_key_generation {
                         bail!("requires --accept-server-key-generation: this generates the client private key on the server")
                     }
-                    let key = platform::generate_key(false)?;
-                    after.add(
-                        name.clone(),
-                        platform::public_key(&key)?,
-                        platform::generate_key(true)?,
-                    )?;
-                    let profile = shadowborn_core::client_template(&after, name)?
-                        .replace("<DEVICE_PRIVATE_KEY>", key.expose());
-                    let encrypted = platform::encrypt(recipient, profile.as_bytes())?;
-                    platform::write_new_secret(bundle, &encrypted)?;
-                    artifact = Some(bundle);
+                    let encrypted =
+                        platform::issue(&mut after, name, recipient, qr_bundle.is_some())?;
+                    platform::write_new_secret(bundle, &encrypted.profile)?;
+                    artifacts.push(bundle);
+                    if let (Some(path), Some(qr)) = (qr_bundle, encrypted.qr) {
+                        if let Err(error) = platform::write_new_secret(path, &qr) {
+                            fs::remove_file(bundle).context("QR export failed; incomplete encrypted profile could not be removed")?;
+                            return Err(error);
+                        }
+                        artifacts.push(path);
+                    }
                 }
                 PeerCommand::Disable { name, confirm: ok } => {
                     confirm(*ok)?;
@@ -278,7 +285,7 @@ fn peer_command(cli: &Cli, cmd: &PeerCommand) -> Result<()> {
                 _ => unreachable!(),
             }
             if let Err(error) = store.save(Some(&before), &after) {
-                if let Some(path) = artifact {
+                for path in artifacts {
                     let _ = fs::remove_file(path);
                 }
                 return Err(error);
@@ -297,6 +304,14 @@ fn execute(cli: &Cli) -> Result<()> {
             );
             Ok(())
         }
+        Commands::Setup(args) => {
+            if cli.config != Path::new("/etc/shadowborn/config.toml")
+                || cli.state_dir != Path::new("/var/lib/shadowborn")
+            {
+                bail!("setup creates a new gateway under --output; do not combine it with global --config/--state-dir")
+            }
+            args.execute()
+        }
         Commands::Doctor => {
             let tools = [
                 "wg",
@@ -305,6 +320,7 @@ fn execute(cli: &Cli) -> Result<()> {
                 "unbound",
                 "unbound-checkconf",
                 "age",
+                "qrencode",
                 "systemctl",
             ]
             .map(|name| {

@@ -20,6 +20,8 @@ def main():
     age = os.environ.get('SHADOWBORN_AGE') or shutil.which('age')
     keygen = os.environ.get('SHADOWBORN_AGE_KEYGEN') or shutil.which('age-keygen')
     wg = shutil.which('wg')
+    qrencode = shutil.which('qrencode')
+    decoder = os.environ.get('SHADOWBORN_ZBARIMG') or shutil.which('zbarimg')
     if not all((age, keygen, wg, shutil.which('unshare'), shutil.which('chroot'))):
         print('SKIPPED: provisioning namespace requires wg, age, age-keygen, unshare, chroot')
         return
@@ -35,6 +37,8 @@ def main():
             (jail / 'dev' / device).touch()
         binaries = ((ROOT / 'target/release/shadowborn', 'usr/local/bin/shadowborn'),
                     (Path(wg), 'usr/bin/wg'), (Path(age), 'usr/bin/age'))
+        if qrencode:
+            binaries += ((Path(qrencode), 'usr/bin/qrencode'),)
         for source, destination in binaries:
             shutil.copy2(source, jail / destination)
             linked = subprocess.run(['ldd', str(source)], capture_output=True, text=True, check=True).stdout
@@ -49,12 +53,41 @@ def main():
         identity.chmod(0o600)
         recipient = subprocess.run([keygen, '-y', str(identity)], capture_output=True, text=True, check=True).stdout.strip()
 
+        outputs = []
+
         def cli(*args, ok=True):
             result = subprocess.run(['unshare', '-Urnm', '--propagation', 'private', 'sh', '-c',
                                      'mount --bind /dev/null "$1/dev/null" && mount --bind /dev/urandom "$1/dev/urandom" && exec chroot "$@"',
                                      'lab-runner', str(jail), '/usr/local/bin/shadowborn', *args], capture_output=True, text=True, timeout=45)
             assert (result.returncode == 0) == ok, ('CLI operation failed', args[0], result.returncode, result.stderr[:180])
+            outputs.append(result.stdout + result.stderr)
             return result
+
+        def decrypt(path):
+            encrypted = path.read_bytes()
+            assert encrypted.startswith(b'age-encryption.org/')
+            return subprocess.run([age, '-d', '-i', str(identity)], input=encrypted,
+                                  capture_output=True, check=True).stdout
+
+        def verify_imports(base, profile_name, qr_name, stored):
+            profile = decrypt(base / profile_name)
+            png = decrypt(base / qr_name)
+            assert png.startswith(b'\x89PNG\r\n\x1a\n')
+            assert b'<DEVICE_PRIVATE_KEY>' not in profile
+            assert b'AllowedIPs = 0.0.0.0/0, ::/0' in profile
+            private = re.search(rb'^PrivateKey = (.+)$', profile, re.M).group(1)
+            public = subprocess.run([wg, 'pubkey'], input=private + b'\n', capture_output=True, check=True).stdout.decode().strip()
+            peer = next(p for p in stored['peers'] if p['public_key'] == public)
+            assert f'PresharedKey = {peer["psk"]}'.encode() in profile
+            assert private.decode() not in json.dumps(stored)
+            assert all(private.decode() not in output and peer['psk'] not in output for output in outputs)
+            if decoder:
+                # No D-Bus broadcast of the decoded secret, and no terminal output.
+                decoded = subprocess.run([decoder, '--nodbus', '--quiet', '--raw', '-'],
+                                         input=png, capture_output=True, check=True).stdout
+                assert decoded == profile + b'\n', 'QR payload differs from the importable profile'
+            else:
+                print('SKIPPED: independent QR decoding requires zbarimg')
 
         cli('init', '--dry-run')
         assert not (jail / 'var/lib/shadowborn').exists()
@@ -80,10 +113,75 @@ def main():
         encrypted = (jail / 'root/issued.age').read_bytes()
         decoded = subprocess.run([age, '-d', '-i', str(identity)], input=encrypted, capture_output=True, check=True).stdout
         assert b'<DEVICE_PRIVATE_KEY>' not in decoded and b'AllowedIPs = 0.0.0.0/0, ::/0' in decoded
+        if qrencode:
+            state_path = jail / 'var/lib/shadowborn/state.json'
+            before = state_path.read_bytes()
+            issue = ['peer', 'issue', '--name', 'phone', '--recipient', recipient,
+                     '--bundle', '/root/phone.conf.age', '--qr-bundle', '/root/phone.png.age']
+            cli(*issue, ok=False)
+            assert state_path.read_bytes() == before
+            assert not (jail / 'root/phone.conf.age').exists()
+            occupied = jail / 'root/phone.png.age'
+            occupied.write_bytes(b'existing operator file')
+            cli(*issue, '--accept-server-key-generation', ok=False)
+            assert occupied.read_bytes() == b'existing operator file'
+            assert not (jail / 'root/phone.conf.age').exists()
+            assert state_path.read_bytes() == before
+            occupied.unlink()
+            (jail / 'usr/bin/qrencode').rename(jail / 'usr/bin/qrencode.saved')
+            cli(*issue, '--accept-server-key-generation', ok=False)
+            assert state_path.read_bytes() == before
+            assert not (jail / 'root/phone.conf.age').exists()
+            (jail / 'usr/bin/qrencode.saved').rename(jail / 'usr/bin/qrencode')
+            cli(*issue, '--accept-server-key-generation')
+            verify_imports(jail / 'root', 'phone.conf.age', 'phone.png.age', json.loads(state_path.read_text()))
+            for artifact in ('phone.conf.age', 'phone.png.age'):
+                assert (jail / 'root' / artifact).stat().st_mode & 0o777 == 0o600
+            cli(*issue, '--accept-server-key-generation', ok=False)
+
+            setup = ['setup', '--endpoint', '203.0.113.20', '--wan-interface', 'ens4',
+                     '--admin-ipv4', '198.51.100.9/32', '--listen-port', '51821',
+                     '--ssh-port', '2222', '--tunnel-ipv4', '10.90.0.1/24',
+                     '--name', 'first', '--recipient', recipient, '--output', '/root/prepared']
+            plan = json.loads(cli(*setup, '--dry-run').stdout)
+            assert plan['network_mutations'] is False and plan['listen_port'] == 51821
+            assert plan['wan_interface'] == 'ens4' and plan['ssh_port'] == 2222
+            assert not (jail / 'root/prepared').exists()
+            cli(*setup, ok=False)
+            assert not (jail / 'root/prepared').exists()
+            (jail / 'usr/bin/qrencode').rename(jail / 'usr/bin/qrencode.saved')
+            cli(*setup, '--accept-server-key-generation', ok=False)
+            assert not (jail / 'root/prepared').exists()
+            (jail / 'usr/bin/qrencode.saved').rename(jail / 'usr/bin/qrencode')
+            cli(*setup, '--accept-server-key-generation')
+            prepared = jail / 'root/prepared'
+            stored_setup = json.loads((prepared / 'state/state.json').read_text())
+            verify_imports(prepared, 'client.conf.age', 'client.png.age', stored_setup)
+            assert stored_setup['config']['server']['endpoint'] == '203.0.113.20'
+            assert stored_setup['peers'][0]['address'] == '10.90.0.2'
+            assert sorted(p.name for p in prepared.iterdir()) == [
+                'NEXT-STEPS.txt', 'client.conf.age', 'client.png.age', 'config.toml', 'server', 'state']
+            for path in (prepared, *prepared.rglob('*')):
+                assert path.stat().st_mode & 0o777 == (0o700 if path.is_dir() else 0o600)
+            assert sorted(p.name for p in (prepared / 'state').iterdir()) == ['lock', 'state.json']
+            original = (prepared / 'state/state.json').read_bytes()
+            cli(*setup, '--accept-server-key-generation', ok=False)
+            assert (prepared / 'state/state.json').read_bytes() == original
+            cli('--config', '/root/prepared/config.toml', '--state-dir', '/root/prepared/state', 'validate')
+            cli('--state-dir', '/root/prepared/state', 'peer', 'revoke', '--name', 'first', '--confirm')
+            assert json.loads((prepared / 'state/state.json').read_text())['peers'][0]['status'] == 'revoked'
+            print('PASS: encrypted QR issuance/setup, secret custody, permissions, output conflicts and failure cleanup')
+            if decoder:
+                print('PASS: independent PNG QR decoding matches the complete standard WireGuard profile byte-for-byte')
+        else:
+            print('SKIPPED: QR enrollment/setup tests require qrencode')
         (jail / 'etc/wireguard').mkdir()
         (jail / 'etc/wireguard/wg-shadowborn.conf').write_text('# deployed marker')
         cli('peer', 'revoke', '--name', 'convenience', '--confirm', ok=False)
         cli('render', '--output', '/root/deployed', ok=False)
+        if qrencode:
+            cli(*setup[:-1], '/root/deployed-setup', '--accept-server-key-generation', ok=False)
+            assert not (jail / 'root/deployed-setup').exists()
         stored = json.loads((jail / 'var/lib/shadowborn/state.json').read_text())
         redacted = cli('peer', 'show', '--name', 'convenience', '--redacted').stdout
         assert stored['server_private_key'] not in redacted

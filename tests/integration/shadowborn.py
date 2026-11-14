@@ -31,6 +31,23 @@ def main():
             assert plan['stage'] == 'PROVISIONING_ONLY'
             assert not state.exists()
         run(cmd + ['validate'])
+        setup = [CLI, 'setup', '--endpoint', '203.0.113.20', '--wan-interface', 'ens4',
+                 '--admin-ipv4', '198.51.100.9/32', '--name', 'phone',
+                 '--recipient', 'age1placeholder', '--output', base / 'setup']
+        assert json.loads(run(setup + ['--dry-run']).stdout)['network_mutations'] is False
+        assert not (base / 'setup').exists()
+        for flag, value in (('--listen-port', '0'), ('--name', '../../escape'),
+                            ('--wan-interface', 'ens4;id'), ('--admin-ipv4', '0.0.0.0/0'),
+                            ('--recipient', 'not-a-recipient')):
+            invalid = list(setup)
+            if flag in invalid:
+                invalid[invalid.index(flag) + 1] = value
+            else:
+                invalid += [flag, value]
+            run(invalid + ['--dry-run'], ok=False)
+        if os.geteuid() != 0:
+            run(setup + ['--accept-server-key-generation'], ok=False)
+            assert not (base / 'setup').exists()
         run(cmd + ['apply', '--confirm'], ok=False)
         run(cmd + ['client', 'lockdown', 'enable', '--confirm'], ok=False)
         assert json.loads(run(cmd + ['client', 'lockdown', 'status']).stdout)['enforced'] is False

@@ -16,3 +16,9 @@ Primary references used for fresh configuration design:
 
 Online documentation is design input, not proof of installed-version behavior.
 Actual namespace and VM results are recorded separately in validation.md.
+
+QR continuation: [qrencode CLI reference](https://github.com/fukuchi/libqrencode/blob/master/qrencode.1.in)
+and the installed 4.1.1 help were checked for stdin input and PNG output to a pipe.
+The optional future DNS stack is assessed against the
+[Pi-hole FTL reference](https://docs.pi-hole.net/ftldns/configfile/), not historical
+Mistborn defaults. No QR or DNS-addon source code was copied.

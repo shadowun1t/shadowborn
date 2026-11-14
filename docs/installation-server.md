@@ -1,5 +1,9 @@
 # Fresh server installation (provisioning preview)
 
+For a shorter file-preparation flow with the first client's profile and QR, use
+[setup](quickstart-qr.md), then return to manual activation below. Do not run
+`init` after `setup`: it has already generated the gateway identity and state.
+
 Target evaluation platforms: Debian and Ubuntu systemd VMs, initially x86_64.
 No OS version is production-certified yet. Use a disposable owned VM and its
 provider console. Do not run the network activation section on the developer

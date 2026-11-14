@@ -11,14 +11,14 @@ use std::{
 /// Fixed program allowlist, no shell, bounded output, timeout, suppressed stderr.
 /// Secret input uses a pipe, never argv; inherited descriptors are not logged.
 pub fn run(program: &str, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {
-    if !["wg", "age"].contains(&program) {
+    if !["wg", "age", "qrencode"].contains(&program) {
         bail!("unsupported subprocess")
     }
     let executable = ["/usr/bin", "/usr/sbin"]
         .iter()
         .map(|dir| Path::new(dir).join(program))
         .find(|p| p.is_file())
-        .context("required tool missing (wg or age)")?;
+        .with_context(|| format!("required tool missing: {program}"))?;
     let mut child = Command::new(executable)
         .args(args)
         .env_clear()
@@ -86,6 +86,10 @@ pub fn public_key(private: &Secret) -> Result<String> {
     Ok(key)
 }
 pub fn encrypt(recipient: &str, plain: &[u8]) -> Result<Vec<u8>> {
+    validate_recipient(recipient)?;
+    run("age", &["--encrypt", "--recipient", recipient], plain)
+}
+pub fn validate_recipient(recipient: &str) -> Result<()> {
     if !recipient.starts_with("age1")
         || recipient.len() > 100
         || !recipient
@@ -94,7 +98,7 @@ pub fn encrypt(recipient: &str, plain: &[u8]) -> Result<Vec<u8>> {
     {
         bail!("native age recipient required")
     }
-    run("age", &["--encrypt", "--recipient", recipient], plain)
+    Ok(())
 }
 pub fn decrypt(identity: &Path, cipher: &[u8]) -> Result<Vec<u8>> {
     // Validate the identity path/permissions before passing it to age. No secret
