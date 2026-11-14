@@ -65,6 +65,7 @@ best effort until their behavior has been tested.
 | **Quick preparation and QR** | `setup` prepares a new server and first device; encrypted PNG QR and `.conf` exports contain the same per-device credentials. |
 | **Server isolation** | Generated rules restrict peer sources, deny peer-to-peer and private-network forwarding, block cloud metadata access, and scope NAT to the selected WAN. |
 | **DNS configuration** | A tunnel-bound resolver with pinned Quad9 DoT upstreams and plaintext upstream fallback disabled. |
+| **Domain/IP filtering** | Reviewed domain/hosts lists, DNS allow exceptions, private names and IPv4 egress CIDRs; no query/hit history. |
 | **Protected state** | Private files, exclusive locks, atomic writes, ownership checks and redacted diagnostics. |
 | **Backup and restore** | age-encrypted configuration backups; offline restore preserves current disabled and revoked authorizations. |
 | **Packaging** | File-only installation, update and removal with ownership checks. Network activation is a separate operation. |
@@ -79,6 +80,11 @@ Routed IPv6 egress and persistent client protection remain unfinished. A standar
 profile does not guarantee that traffic stays blocked when the tunnel is down.
 
 ## Getting started
+
+The [Mistborn coverage plan](docs/mistborn-parity.md) tracks the broader requested
+platform: private management/MFA, DNS backends and optional self-hosted apps.
+Only explicitly implemented features are available; the full platform is not
+yet present. Native [filtering](docs/filtering.md) can be provisioned today.
 
 For a fresh VM and a phone, start with the [server + QR walkthrough](docs/quickstart-qr.md).
 `shadowborn setup --help` lists the endpoint, WAN and SSH allowlist inputs.
@@ -141,6 +147,8 @@ before using the profile on a working workstation.
 | Inspect a device with keys hidden | `sudo shadowborn peer show --name laptop --redacted` |
 | Export a server review bundle | `sudo shadowborn render --output /root/shadowborn-review` |
 | Export a client template | `sudo shadowborn client profile --name laptop --output /root/laptop.template` |
+| Check domain/IP policy | `shadowborn --config config/server.example.toml policy check --input config/filtering.example.toml` |
+| Import offline policy | `sudo shadowborn policy import --input /root/filtering.toml --confirm` |
 | Revoke an offline authorization | `sudo shadowborn peer revoke --name laptop --confirm` |
 | Inspect reported status | `shadowborn status` |
 
@@ -227,6 +235,8 @@ an older installation.
 | [Server + QR walkthrough](docs/quickstart-qr.md) | Prepare a gateway and first device, decrypt locally and scan. |
 | [Client enrollment](docs/client-enrollment.md) | Device keys, secure profile transfer and standard WireGuard import. |
 | [DNS privacy](docs/dns-privacy.md) | Resolver configuration, encrypted upstreams and validation limits. |
+| [Domain/IP filtering](docs/filtering.md) | Domain and hosts imports, exceptions, private names and IPv4 blocklists. |
+| [Mistborn coverage](docs/mistborn-parity.md) | Complete requested feature inventory, status and integration gates. |
 | [Client protection](docs/client-kill-switch.md) | Requirements for the unfinished persistent strict mode. |
 | [Administration and recovery](docs/admin-recovery.md) | Backups, revocation, recovery and removal. |
 | [Security hardening](docs/security-hardening.md) | Host assumptions, permissions and service boundaries. |

@@ -60,6 +60,8 @@ sudo shadowborn setup \
 overrides. The default is UDP 51820, SSH TCP 22, `wg-shadowborn`, `10.89.0.1/24`,
 with IPv4 Internet egress and IPv6 blocked. Both client default routes use WG.
 Safety settings, DoT and the no-activity-logs policy cannot be disabled.
+Add `--policy /root/filtering.toml` for reviewed domain/IP filters and private
+names; see the [policy guide](filtering.md). The same option works with dry-run.
 `--dry-run` checks configuration, not installed tools, age recipient checksum or
 host deployment readiness. Existing output paths are always refused.
 

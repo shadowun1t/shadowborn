@@ -10,6 +10,13 @@ crash reporting, remote collector or persistent troubleshooting mode exists.
 The CLI performs no periodic recording. `status` currently reports UNKNOWN for
 runtime properties rather than collecting or caching peer traffic information.
 
+Filtering lists contain domains and CIDRs deliberately chosen by the operator,
+plus private service-name configuration. They are never populated from queries,
+flows or counters. `policy show` reveals configuration only. The domain/IP
+filters do not produce query logs, hit statistics or historical reports.
+Mistborn-style firewall histories and recording SIEM/IDS integrations remain
+incompatible with this policy; optional applications need separate verification.
+
 Necessary persistent configuration: server private/public key, peer public keys,
 per-peer PSKs, assigned tunnel addresses, names, active/disabled/revoked state,
 validated server policy. Revoked entries lose their PSK but keep a tombstone to

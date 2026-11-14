@@ -17,6 +17,7 @@ FILES = {
     'usr/local/share/doc/shadowborn/README.md': ('README.md', 0o644),
     'usr/local/share/doc/shadowborn/LICENSE': ('LICENSE', 0o644),
     'usr/local/share/doc/shadowborn/server.example.toml': ('config/server.example.toml', 0o644),
+    'usr/local/share/doc/shadowborn/filtering.example.toml': ('config/filtering.example.toml', 0o644),
 }
 # Preserve the repository's relative documentation links in the installed copy.
 # Legacy guides are documentation only; no legacy binaries/services are installed.

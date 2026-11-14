@@ -85,3 +85,22 @@ fn traversal_is_rejected_before_any_directory_is_created() {
     assert!(!escaped.exists());
     assert!(create_private(std::path::Path::new("relative-private-test")).is_err());
 }
+
+#[test]
+fn policy_reader_is_bounded_and_refuses_symlinks_and_special_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("policy");
+    fs::write(&file, "blocked_domains = []\n").unwrap();
+    assert!(read_policy(&file).unwrap().contains("blocked_domains"));
+    let link = dir.path().join("link");
+    symlink(&file, &link).unwrap();
+    assert!(read_policy(&link).is_err());
+    assert!(read_policy(std::path::Path::new("/dev/zero")).is_err());
+    let fifo = dir.path().join("fifo");
+    let fifo_name = std::ffi::CString::new(fifo.as_os_str().as_encoded_bytes()).unwrap();
+    // Synthetic FIFO in the disposable fixture, no writer: the read must not block.
+    assert_eq!(unsafe { libc::mkfifo(fifo_name.as_ptr(), 0o600) }, 0);
+    assert!(read_policy(&fifo).is_err());
+    fs::write(&file, vec![b'x'; shadowborn_core::MAX_POLICY_BYTES + 1]).unwrap();
+    assert!(read_policy(&file).is_err());
+}

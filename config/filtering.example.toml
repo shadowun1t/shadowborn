@@ -1,0 +1,9 @@
+# Administrator policy, never learned from DNS queries or traffic.
+# Replace these reserved example names/benchmark addresses with reviewed lists.
+blocked_domains = ["ads.example", "telemetry.example"]
+allowed_domains = ["updates.telemetry.example"]
+blocked_ipv4 = ["198.18.1.0/24"]
+
+[[local_records]]
+name = "gateway.shadowborn.home.arpa"
+address = "10.89.0.1"

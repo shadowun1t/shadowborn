@@ -19,6 +19,7 @@ def main():
         fixture = {'schema_version': 1,
                    'config': tomllib.loads((ROOT / 'config/server.example.toml').read_text()),
                    'server_private_key': 'B' * 42 + 'A=', 'server_public_key': 'C' * 42 + 'A=', 'peers': []}
+        fixture['config']['filtering'] = tomllib.loads((ROOT / 'config/filtering.example.toml').read_text())
         source = base / 'fixture.json'
         source.write_text(json.dumps(fixture))
         source.chmod(0o600)

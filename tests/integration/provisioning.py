@@ -93,6 +93,37 @@ def main():
         assert not (jail / 'var/lib/shadowborn').exists()
         cli('init')
         cli('init', ok=False)
+        policy_file = jail / 'root/filtering.toml'
+        policy_file.write_text('blocked_domains = ["ads.example"]\nallowed_domains = ["safe.ads.example"]\nblocked_ipv4 = ["198.18.1.0/24"]\n[[local_records]]\nname = "gateway.shadowborn.home.arpa"\naddress = "10.89.0.1"\n')
+        state_path = jail / 'var/lib/shadowborn/state.json'
+        before_policy = state_path.read_bytes()
+        cli('policy', 'check', '--input', '/root/filtering.toml')
+        cli('policy', 'import', '--input', '/root/filtering.toml', ok=False)
+        cli('policy', 'import', '--input', '/root/filtering.toml', '--dry-run')
+        assert state_path.read_bytes() == before_policy
+        cli('policy', 'import', '--input', '/root/filtering.toml', '--confirm')
+        assert json.loads(cli('policy', 'show').stdout)['blocked_domains'] == ['ads.example']
+        assert json.loads(cli('plan').stdout)['policy_entries']['blocked_domains'] == 1
+        # The initialized state's policy is authoritative, not the old config file.
+        cli('render', '--output', '/root/filtered')
+        assert 'always_nxdomain' in (jail / 'root/filtered/unbound.conf').read_text()
+        assert '198.18.1.0/24' in (jail / 'root/filtered/server.nft').read_text()
+        blocklist = jail / 'root/selected.list'
+        blocklist.write_text('0.0.0.0 ads.example telemetry.example\n')
+        cli('policy', 'import-blocklist', '--kind', 'domains', '--input', '/root/selected.list', '--confirm')
+        assert len(json.loads(cli('policy', 'show').stdout)['blocked_domains']) == 2
+        current_policy = state_path.read_bytes()
+        blocklist.write_text('valid.example\n||PRIVATE_INVALID_FIXTURE^\n')
+        result = cli('policy', 'import-blocklist', '--kind', 'domains', '--input', '/root/selected.list', '--confirm', ok=False)
+        assert 'PRIVATE_INVALID_FIXTURE' not in result.stderr
+        assert state_path.read_bytes() == current_policy
+        blocklist.write_text('198.18.2.1\n')
+        cli('policy', 'import-blocklist', '--kind', 'ipv4', '--input', '/root/selected.list', '--confirm')
+        assert json.loads(cli('policy', 'show').stdout)['blocked_ipv4'] == ['198.18.2.1/32']
+        policy_file.write_text('')
+        cli('policy', 'import', '--input', '/root/filtering.toml', '--confirm')
+        assert json.loads(cli('plan').stdout)['policy_entries']['blocked_domains'] == 0
+        print('PASS: offline filtering import, dry-run, canonical-state planning, invalid-list atomicity and no activity output')
         private = subprocess.run([wg, 'genkey'], capture_output=True, check=True).stdout
         public = subprocess.run([wg, 'pubkey'], input=private, capture_output=True, check=True).stdout.decode().strip()
         cli('peer', 'add', '--name', 'synthetic', '--public-key', public)
@@ -139,7 +170,8 @@ def main():
                 assert (jail / 'root' / artifact).stat().st_mode & 0o777 == 0o600
             cli(*issue, '--accept-server-key-generation', ok=False)
 
-            setup = ['setup', '--endpoint', '203.0.113.20', '--wan-interface', 'ens4',
+            policy_file.write_text('blocked_domains = ["ads.example"]\n')
+            setup = ['setup', '--policy', '/root/filtering.toml', '--endpoint', '203.0.113.20', '--wan-interface', 'ens4',
                      '--admin-ipv4', '198.51.100.9/32', '--listen-port', '51821',
                      '--ssh-port', '2222', '--tunnel-ipv4', '10.90.0.1/24',
                      '--name', 'first', '--recipient', recipient, '--output', '/root/prepared']
@@ -159,6 +191,7 @@ def main():
             verify_imports(prepared, 'client.conf.age', 'client.png.age', stored_setup)
             assert stored_setup['config']['server']['endpoint'] == '203.0.113.20'
             assert stored_setup['peers'][0]['address'] == '10.90.0.2'
+            assert stored_setup['config']['filtering']['blocked_domains'] == ['ads.example']
             assert sorted(p.name for p in prepared.iterdir()) == [
                 'NEXT-STEPS.txt', 'client.conf.age', 'client.png.age', 'config.toml', 'server', 'state']
             for path in (prepared, *prepared.rglob('*')):
@@ -179,6 +212,7 @@ def main():
         (jail / 'etc/wireguard/wg-shadowborn.conf').write_text('# deployed marker')
         cli('peer', 'revoke', '--name', 'convenience', '--confirm', ok=False)
         cli('render', '--output', '/root/deployed', ok=False)
+        cli('policy', 'import', '--input', '/root/filtering.toml', '--confirm', ok=False)
         if qrencode:
             cli(*setup[:-1], '/root/deployed-setup', '--accept-server-key-generation', ok=False)
             assert not (jail / 'root/deployed-setup').exists()

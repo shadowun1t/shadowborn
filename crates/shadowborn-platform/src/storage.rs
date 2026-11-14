@@ -9,6 +9,26 @@ use std::{
 };
 
 const MAX_STATE: u64 = 4 * 1024 * 1024;
+
+/// Read explicitly selected, non-secret policy input without following a final
+/// symlink or blocking on a FIFO/device. Never echo raw parse failures.
+pub fn read_policy(path: &Path) -> Result<String> {
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+        .context("cannot open policy input")?;
+    if !file.metadata()?.is_file() {
+        bail!("policy input must be a regular file")
+    }
+    let mut bytes = Vec::new();
+    file.take(shadowborn_core::MAX_POLICY_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > shadowborn_core::MAX_POLICY_BYTES {
+        bail!("policy input exceeds size limit")
+    }
+    String::from_utf8(bytes).map_err(|_| anyhow::anyhow!("policy input must be UTF-8"))
+}
 fn uid() -> u32 {
     unsafe { libc::geteuid() }
 }

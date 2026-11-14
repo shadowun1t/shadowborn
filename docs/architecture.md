@@ -7,7 +7,7 @@ in [legacy/architecture.md](legacy/architecture.md).
 
 - `shadowborn-core`: strict versioned configuration, peer authorization model,
   deterministic address allocation, revocation-preserving restore, redacted
-  secret type, pure plans and WireGuard/nft/Unbound/systemd renderers.
+  secret type, bounded filtering policy and pure WireGuard/nft/Unbound/systemd renderers.
 - `shadowborn-platform`: root/undeployed guards, protected files, no-follow
   opens, atomic replacement/fsync, exclusive locking, compare-before-write,
   bounded `wg` and `age` subprocesses with pipes and suppressed diagnostics.
@@ -23,6 +23,14 @@ state. Revoked entries retain only identity/address tombstones; their PSK is
 removed. Lock contention and stale state fail closed. This transaction manages
 files, not kernel networking. Exported bundles are immutable review artifacts,
 not another canonical database; retire stale bundles after authorization changes.
+
+The optional filtering section stores only operator-selected domains, exceptions,
+IPv4 CIDRs and private DNS records. Imports are bounded and fail atomically on
+invalid input. CLI policy mutations use the same offline guard/lock/compare/write
+path as peer authorization. After initialization, planning reads state rather
+than stale input TOML. No policy is derived from observed traffic. The pure
+renderers compile lists into Unbound zones and nftables sets without activity
+logging or hit counters. See [filtering](filtering.md).
 
 Server traffic policy: IPv4 peers may reach public Internet via the configured
 WAN only, with scoped masquerade and established return traffic. WireGuard uses

@@ -1,5 +1,31 @@
 # Shadowborn validation
 
+## Mistborn filtering continuation
+
+Baseline `7a4be2d`, clean checkout; same isolated Kali x86_64 lab and extracted
+Unbound 1.26.2 used below. The added features are offline provisioning policy,
+not live gateway administration or a complete Mistborn deployment.
+
+| Check | Result / scope |
+| --- | --- |
+| Workspace and packaging | PASS: `scripts/validate.sh`, 74 workspace tests, Clippy, release build, generated service syntax, protected provisioning/QR tests and 10 legacy integration checks. Added compatibility/FIFO assertions also passed targeted core/platform tests. |
+| Repository checks | PASS: ShellCheck, diff whitespace and common private-key pattern scan across 88 text files (not a complete secret audit). |
+| Policy parsing/validation | PASS: domain/hosts/IP imports, normalization, injection/malformed input refusal, size/entry bounds, DNS exception boundaries, private namespace/address restrictions, safe regular-file reads. |
+| Offline CLI | PASS: check, full and selected-list import, dry-run, canonical-state planning, setup with policy, unchanged state on invalid input, deployed-host refusal. |
+| Domain filtering | PASS: actual Unbound over the kernel WG lab; blocked A/AAAA and TCP requests, descendants, private record resolution and unknown private-name NXDOMAIN. |
+| Synthetic authenticated DoT | PASS: allowed exception resolves through a local TLS fixture; wrong authenticated name fails. No public Quad9 or Internet test is implied. |
+| Resolver restart / file-output scope | PASS: policy survives process restart, blocked/private queries never reach the synthetic upstream, no additional lab files and no tested query/client values in captured process output. This is not a systemd/journal/reboot no-log certification. |
+| IPv4 filter and replacement | PASS: denied synthetic destination and overlapping intervals; replace policy to block a previously reachable destination, restore access, preserve unrelated table. |
+| Regression discovered/fixed | Old `flush table` rendering retained nft set elements; owned tables now replaced atomically. Added explicit removed-element regression. |
+| Production / optional apps | NOT TESTED / NOT IMPLEMENTED: real VM lifecycle, strict client, live durable revoke, private portal/MFA, Pi-hole, DNSCrypt and application adapters. |
+
+Namespace command: `SHADOWBORN_UNBOUND=/path/to/extracted/usr/sbin/unbound python3
+tests/namespaces/shadowborn.py` (or install Unbound in the disposable CI runner).
+The generated config's directory, trust store and upstream addresses are relocated
+to synthetic fixtures; TLS authentication, ACL and filtering directives remain.
+No host network/service settings or customer traffic are used. The helper rejects
+direct developer-host execution before opening sockets.
+
 ## Continuation validation — 2026-11-14
 
 Starting checkout `b7e5057` was clean. Environment: Kali x86_64, kernel

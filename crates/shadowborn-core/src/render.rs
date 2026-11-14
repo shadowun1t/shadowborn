@@ -21,6 +21,7 @@ pub struct Plan {
     pub live_apply: &'static str,
     pub files: Vec<&'static str>,
     pub required_operator_checks: Vec<&'static str>,
+    pub policy_entries: BTreeMap<&'static str, usize>,
 }
 pub fn plan(config: &crate::Config, state: Option<&State>) -> Result<Plan> {
     config.validate()?;
@@ -44,6 +45,12 @@ pub fn plan(config: &crate::Config, state: Option<&State>) -> Result<Plan> {
                 .filter(|p| p.status == PeerStatus::Active)
                 .count()
         }),
+        policy_entries: BTreeMap::from([
+            ("blocked_domains", config.filtering.blocked_domains.len()),
+            ("allowed_domains", config.filtering.allowed_domains.len()),
+            ("blocked_ipv4", config.filtering.blocked_ipv4.len()),
+            ("local_records", config.filtering.local_records.len()),
+        ]),
         ipv6: "BLOCKED_ON_SERVER; CLIENT_ENFORCEMENT_NOT_VERIFIED",
         no_activity_logs: "CONFIGURED; RUNTIME_UNKNOWN",
         live_apply: "UNSUPPORTED: timed rollback, reboot recovery and SSH gates not met",
@@ -109,15 +116,24 @@ pub fn server_firewall(state: &State) -> Result<String> {
     } else {
         format!("elements = {{ {peers} }};")
     };
+    let blocked = if state.config.filtering.blocked_ipv4.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "elements = {{ {} }};",
+            state.config.filtering.blocked_ipv4.join(", ")
+        )
+    };
     Ok(format!(
         r#"# Owned tables only. Review collisions before the FIRST VM activation.
 # A single nft batch replaces these owned tables atomically. No activity logging.
 add table inet shadowborn
-flush table inet shadowborn
+delete table inet shadowborn
 add table ip shadowborn_nat
-flush table ip shadowborn_nat
+delete table ip shadowborn_nat
 table inet shadowborn {{
   set peers {{ type ipv4_addr; {elements} }}
+  set blocked_v4 {{ type ipv4_addr; flags interval; auto-merge; {blocked} }}
   set forbidden {{ type ipv4_addr; flags interval; elements = {{ 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 }}; }}
   chain vpn_input {{
     ip saddr @peers ip daddr {dns} udp dport 53 accept
@@ -139,6 +155,8 @@ table inet shadowborn {{
     type filter hook forward priority filter; policy drop;
     ct state invalid drop
     meta nfproto ipv6 drop
+    iifname "{wg}" ip daddr @blocked_v4 drop
+    oifname "{wg}" ip saddr @blocked_v4 drop
     iifname "{wg}" ip daddr @forbidden drop
     iifname "{wg}" udp dport 53 drop
     iifname "{wg}" tcp dport 53 drop
@@ -197,7 +215,7 @@ server:
     tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"
     # DNSSEC validation is delegated to Quad9; local validation is NOT claimed.
     module-config: "iterator"
-remote-control:
+{filtering}remote-control:
     control-enable: no
 forward-zone:
     name: "."
@@ -207,7 +225,8 @@ forward-zone:
     forward-addr: 149.112.112.112@853#dns.quad9.net
 "#,
         address = prefix.address,
-        subnet = prefix.cidr()
+        subnet = prefix.cidr(),
+        filtering = config.filtering.unbound_rules()
     ))
 }
 pub fn client_template(state: &State, name: &str) -> Result<String> {

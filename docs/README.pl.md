@@ -1,5 +1,13 @@
 # Shadowborn — punkt wejścia
 
+Rozszerzenia względem Mistborna są śledzone w [pełnej macierzy funkcji](mistborn-parity.md).
+Dodano natywne blokowanie domen (także listy `hosts`), wyjątki DNS, prywatne nazwy
+usług i blokowanie docelowych adresów IPv4 w stylu Coppercloud. Ustawienia nie
+tworzą historii zapytań ani ruchu: [instrukcja filtrów](filtering.md).
+Panel WWW/MFA i aplikacje dodatkowe pozostają do wdrożenia; samo umieszczenie ich
+w macierzy nie oznacza, że działają. Oryginalne moduły rejestrujące aktywność
+kolidują z obowiązkową polityką „zero logów”.
+
 Repozytorium zawiera nowy moduł przygotowywania serwera WireGuard oraz zachowany
 klient Shadow Mist. Nowy CLI generuje konfigurację serwera, zarządza urządzeniami
 przed wdrożeniem i przygotowuje chronione kopie. Nie uruchamia automatycznie VPN.

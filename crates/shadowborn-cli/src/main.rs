@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+mod policy;
 mod setup;
 use clap::{Parser, Subcommand};
 use shadowborn_core::{Config, PeerStatus, State};
@@ -29,6 +30,11 @@ enum Commands {
     Validate,
     /// File-only wizard for a fresh gateway using baseline defaults.
     Setup(setup::Setup),
+    /// Manage configured DNS/IP filtering before server deployment.
+    Policy {
+        #[command(subcommand)]
+        command: policy::PolicyCommand,
+    },
     Init {
         #[arg(long)]
         dry_run: bool,
@@ -205,7 +211,18 @@ fn status(cli: &Cli) -> Result<()> {
     )
 }
 fn provisioning_plan(cli: &Cli) -> Result<()> {
-    emit(shadowborn_core::plan(&config(cli)?, None)?)
+    match fs::symlink_metadata(cli.state_dir.join("state.json")) {
+        Ok(_) => {
+            let state = read_state(cli)?;
+            emit(shadowborn_core::plan(&state.config, Some(&state))?)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            emit(shadowborn_core::plan(&config(cli)?, None)?)
+        }
+        Err(_) => bail!(
+            "cannot inspect protected state for planning; use root for an initialized gateway"
+        ),
+    }
 }
 fn peer_command(cli: &Cli, cmd: &PeerCommand) -> Result<()> {
     match cmd {
@@ -297,6 +314,7 @@ fn peer_command(cli: &Cli, cmd: &PeerCommand) -> Result<()> {
 }
 fn execute(cli: &Cli) -> Result<()> {
     match &cli.command {
+        Commands::Policy { command } => policy::execute(cli, command),
         Commands::Version => {
             println!(
                 "shadowborn {} (provisioning preview)",

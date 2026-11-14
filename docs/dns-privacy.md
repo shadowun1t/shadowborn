@@ -6,6 +6,11 @@ has explicit tunnel-prefix ACL and server firewall admits only authorized peer
 addresses over WG. Plaintext forwarded client DNS to external port 53 is denied;
 application DoH inside the tunnel remains possible.
 
+Native [domain filtering and private names](filtering.md) are now configurable
+without adding another resolver. Domain deny/allow rules use Unbound local zones;
+unknown private names stay local. Policy includes no query history or hit counters.
+This is not a Pi-hole installation and does not certify future Pi-hole defaults.
+
 The renderer uses forward-first=no, a CA bundle, zero verbosity, disabled
 query/reply/SERVFAIL logs, disabled syslog, disabled remote control and no periodic
 statistics/cache persistence. Verify with the installed unbound-checkconf and

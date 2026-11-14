@@ -33,6 +33,7 @@ def isolated():
         raise RuntimeError('Refusing execution without a distinct outer network namespace marker')
     if os.geteuid() != 0:
         raise RuntimeError('Expected root mapped only inside the disposable user namespace')
+    from dns_policy import exercise_dns_policy
     children = []
     with tempfile.TemporaryDirectory(prefix='shadowborn-netns-') as temp:
         base = Path(temp)
@@ -56,6 +57,8 @@ def isolated():
             run(['ip', 'link', 'add', 'br-lab', 'type', 'bridge'])
             run(['ip', 'addr', 'add', '203.0.113.254/24', 'dev', 'br-lab'])
             run(['ip', 'addr', 'add', '198.18.0.10/32', 'dev', 'br-lab'])
+            run(['ip', 'addr', 'add', '198.18.1.20/32', 'dev', 'br-lab'])
+            run(['ip', 'addr', 'add', '198.18.0.53/32', 'dev', 'br-lab'])
             run(['ip', 'addr', 'add', '169.254.169.254/32', 'dev', 'br-lab'])
             run(['ip', 'link', 'set', 'br-lab', 'up'])
             for index, (pid, name, address) in enumerate(((server, 'ens3', '203.0.113.1/24'), (client, 'wan0', '203.0.113.2/24'))):
@@ -75,6 +78,12 @@ def isolated():
             psk = run(['wg', 'genpsk']).stdout.strip()
             config = tomllib.loads((ROOT / 'config/server.example.toml').read_text())
             config['server']['endpoint'] = '203.0.113.1'
+            config['filtering'] = {
+                'blocked_domains': ['ads.example', 'telemetry.example'],
+                'allowed_domains': ['safe.ads.example'],
+                'blocked_ipv4': ['198.18.1.0/24', '198.18.1.20/32'],
+                'local_records': [{'name': 'gateway.shadowborn.home.arpa', 'address': '10.89.0.1'}],
+            }
             state = {'schema_version': 1, 'config': config,
                      'server_private_key': private_server.decode(),
                      'server_public_key': public_server.decode(),
@@ -85,9 +94,11 @@ def isolated():
             fixture.chmod(0o600)
             bundle = base / 'bundle'
             run([ROOT / 'target/debug/examples/render_lab', fixture, bundle])
+            ns(server, 'nft', 'add', 'table', 'inet', 'shadowborn_lab_unrelated')
             ns(server, 'nft', '--check', '-f', str(bundle / 'server.nft'))
             ns(server, 'nft', '-f', str(bundle / 'server.nft'))
             ns(server, 'nft', '-f', str(bundle / 'server.nft'))  # owned replacement
+            ns(server, 'nft', 'list', 'table', 'inet', 'shadowborn_lab_unrelated')
             # wg-quick has no DNS/PostUp hooks in the generated server config.
             ns(server, 'wg-quick', 'up', str(bundle / 'wg-shadowborn.conf'))
             ns(server, 'sysctl', '-q', '-w', 'net.ipv4.ip_forward=1')
@@ -105,6 +116,20 @@ def isolated():
             ns(client, 'ip', 'route', 'replace', 'default', 'dev', 'wg-client')
             ns(client, 'ping', '-c', '2', '-W', '2', '198.18.0.10')
             print('PASS: real kernel WireGuard handshake, generated firewall, scoped NAT and return traffic')
+            assert ns(client, 'ping', '-c', '1', '-W', '1', '198.18.1.20', ok=False).returncode
+            print('PASS: configured IPv4 egress blocklist denies a synthetic destination; overlapping ranges accepted')
+            config['filtering']['blocked_ipv4'].append('198.18.0.10/32')
+            fixture.write_text(json.dumps(state))
+            changed = base / 'changed-policy'
+            run([ROOT / 'target/debug/examples/render_lab', fixture, changed])
+            ns(server, 'nft', '-f', str(changed / 'server.nft'))
+            assert ns(client, 'ping', '-c', '1', '-W', '1', '198.18.0.10', ok=False).returncode
+            ns(server, 'nft', 'list', 'table', 'inet', 'shadowborn_lab_unrelated')
+            ns(server, 'nft', '-f', str(bundle / 'server.nft'))
+            assert b'198.18.0.10' not in ns(server, 'nft', 'list', 'set', 'inet', 'shadowborn', 'blocked_v4').stdout
+            ns(client, 'ping', '-c', '1', '-W', '2', '198.18.0.10')
+            print('PASS: filter replacement blocks a previously reachable destination, preserves unrelated table and reverses in the lab')
+            exercise_dns_policy(base, bundle, server, client, ns, run)
             for address in ('10.89.0.1', '169.254.169.254'):
                 assert ns(client, 'ping', '-c', '1', '-W', '1', address, ok=False).returncode
             ns(client, 'ip', 'addr', 'add', '10.89.0.3/32', 'dev', 'wg-client')
@@ -113,7 +138,7 @@ def isolated():
             ns(server, 'wg', 'set', 'wg-shadowborn', 'peer', public_client.decode(), 'remove')
             assert ns(client, 'ping', '-c', '1', '-W', '1', '198.18.0.10', ok=False).returncode
             print('PASS: explicit kernel peer removal stops lab traffic (not CLI live revoke)')
-            print('NOT TESTED: real Internet, DoT runtime, strict client, boot, SSH recovery, runtime no-logs')
+            print('NOT TESTED: real Internet/Quad9, strict client, VM boot, SSH recovery, full service/journal no-log lifecycle')
         finally:
             for child in children:
                 child.terminate()

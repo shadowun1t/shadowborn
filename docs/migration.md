@@ -1,5 +1,26 @@
 # Shadowborn migration plan
 
+## Mistborn feature expansion
+
+The next continuation starts from a clean tracked checkout with the QR/setup
+work already committed. The requested reference is now specifically
+`https://gitlab.com/harlequin516/mistborn`; its README, base composition and MIT
+license were inspected. No upstream source or old image versions are imported.
+
+Preserve existing server and legacy modules. Add an optional, backwards-compatible
+filtering policy to server configuration: domain deny/allow lists, private DNS
+records and IPv4 destination CIDRs. Compile that policy into the existing Unbound
+and nftables bundle, with bounded list import, offline CLI management and real
+namespace DNS/firewall tests. These lists are administrator configuration, never
+observed query/traffic history. No automatic list download or activity recorder.
+
+Track the entire requested feature set in `mistborn-parity.md`, including the
+remaining gateway lifecycle, private portal/MFA and optional applications. Each
+integration needs its own isolation, secret custody, version and no-log tests.
+Historical traffic/SIEM features remain incompatible with the mandatory policy;
+do not silently relax it. Host deployment and existing client changes still
+require explicit operator action.
+
 Baseline inspected on 2026-10-30: clean tracked checkout at `e06bf37`, four
 `shadowmist-*` workspace crates, a local NetworkManager/resolved privacy client,
 no WireGuard server implementation. `origin` already points to

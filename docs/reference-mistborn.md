@@ -1,5 +1,11 @@
 # Design references
 
+The owner's expanded reference is [harlequin516/mistborn](https://gitlab.com/harlequin516/mistborn).
+Its README, base service composition and license were inspected for the
+[feature coverage plan](mistborn-parity.md). The fork's LICENSE is MIT with
+Steven Foerster's notice; this does not resolve this repository's separate
+license provenance issue. No upstream source/configuration was imported.
+
 Mistborn is architectural inspiration for an owned VPN gateway plus DNS, not a
 source dependency. No code, web stack, license or old defaults were imported.
 Pi-hole and dnscrypt-proxy are deferred; any future integration must independently

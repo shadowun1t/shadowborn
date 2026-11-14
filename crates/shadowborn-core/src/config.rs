@@ -11,6 +11,8 @@ pub struct Config {
     pub dns: Dns,
     pub privacy: Privacy,
     pub operations: Operations,
+    #[serde(default)]
+    pub filtering: crate::Filtering,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -202,6 +204,7 @@ impl Config {
         {
             bail!("explicit approval and rollback policy required")
         }
+        self.filtering.validate(p)?;
         Ok(())
     }
 }

@@ -29,3 +29,6 @@ store_peer_activity = false
 auto_apply_on_install = false
 require_confirm = true
 transactional_rollback = true
+
+# Optional [filtering] policy defaults to empty lists for existing configurations.
+# See filtering.example.toml (standalone input to setup --policy / policy import).

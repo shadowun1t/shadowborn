@@ -31,6 +31,13 @@ def main():
             assert plan['stage'] == 'PROVISIONING_ONLY'
             assert not state.exists()
         run(cmd + ['validate'])
+        policy = ROOT / 'config/filtering.example.toml'
+        checked = json.loads(run(cmd + ['policy', 'check', '--input', policy]).stdout)
+        assert checked['policy_entries']['blocked_domains'] == 2
+        assert not state.exists()
+        if os.geteuid() != 0:
+            run(cmd + ['policy', 'import', '--input', policy, '--confirm'], ok=False)
+            assert not state.exists()
         setup = [CLI, 'setup', '--endpoint', '203.0.113.20', '--wan-interface', 'ens4',
                  '--admin-ipv4', '198.51.100.9/32', '--name', 'phone',
                  '--recipient', 'age1placeholder', '--output', base / 'setup']
@@ -75,6 +82,13 @@ def main():
             if marker is not None:
                 os.environ['SHADOWBORN_OUTER_NETNS'] = marker
         print('PASS: direct/internal namespace test invocation cannot mutate host networking')
+        dns_lab = runpy.run_path(str(ROOT / 'tests/namespaces/dns_policy.py'), run_name='dns_guard_test')
+        try:
+            dns_lab['guard']()
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError('DNS helper accepted the developer host namespace')
         stage = base / 'stage'
         install = [ROOT / 'scripts/install-server.sh', '--destdir', stage]
         update = [ROOT / 'scripts/update-server.sh', '--destdir', stage]

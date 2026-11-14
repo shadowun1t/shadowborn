@@ -33,6 +33,9 @@ pub struct Setup {
     accept_server_key_generation: bool,
     #[arg(long)]
     dry_run: bool,
+    /// Optional local TOML filtering policy; never downloaded automatically.
+    #[arg(long)]
+    policy: Option<PathBuf>,
 }
 
 impl Setup {
@@ -47,6 +50,9 @@ impl Setup {
         config.server.listen_port = self.listen_port;
         config.server.ssh_port = self.ssh_port;
         config.server.tunnel_ipv4.clone_from(&self.tunnel_ipv4);
+        if let Some(path) = &self.policy {
+            config.filtering = shadowborn_core::Filtering::parse(&platform::read_policy(path)?)?;
+        }
         config.validate()?;
         platform::validate_recipient(&self.recipient)?;
         if !shadowborn_core::valid_name(&self.name) {
