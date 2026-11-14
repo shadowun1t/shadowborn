@@ -1,5 +1,22 @@
 # Shadowborn migration plan
 
+## Optional modules without retained activity history
+
+Baseline `055ff66` is clean and includes the filtering/QR work. The owner now
+explicitly excludes history-retaining modules and authorizes optional services
+where activity collection can be disabled. No such services are installed yet;
+there are no project-owned SIEM/history modules or data to delete.
+
+Implement independent, opt-in resolver adapters first: Pi-hole FTL in headless
+privacy mode and dnscrypt-proxy with an explicitly pinned resolver, no bootstrap
+fallback or downloaded resolver lists. Preserve Unbound/filtering and the default
+DoT path. Validate actual binaries in disposable namespace/chroot labs; expose
+no new public ports, API or web dashboard. Config/state and service generation
+must reject weakened logging policies and report remaining VM gates as UNKNOWN.
+Remove recording SIEM/IDS/metrics modules from the supported product scope;
+document reasons rather than erasing host logs or existing user data. Additional
+applications remain gated by evidence, not assumed compliant from one log flag.
+
 ## Mistborn feature expansion
 
 The next continuation starts from a clean tracked checkout with the QR/setup
