@@ -22,11 +22,24 @@ pub struct Plan {
     pub files: Vec<&'static str>,
     pub required_operator_checks: Vec<&'static str>,
     pub policy_entries: BTreeMap<&'static str, usize>,
+    pub optional_addons: Vec<&'static str>,
 }
 pub fn plan(config: &crate::Config, state: Option<&State>) -> Result<Plan> {
     config.validate()?;
     if let Some(state) = state {
         state.validate()?;
+    }
+    let mut files = vec![
+        "WireGuard config (secret)",
+        "server.nft",
+        "unbound.conf",
+        "shadowborn-firewall.service",
+        "shadowborn-dns.service",
+        "WireGuard service drop-in",
+        "99-shadowborn.conf",
+    ];
+    if config.addons.dnscrypt.is_some() {
+        files.extend(["dnscrypt-proxy.toml", "shadowborn-dnscrypt.service"]);
     }
     Ok(Plan {
         schema_version: 1,
@@ -51,18 +64,14 @@ pub fn plan(config: &crate::Config, state: Option<&State>) -> Result<Plan> {
             ("blocked_ipv4", config.filtering.blocked_ipv4.len()),
             ("local_records", config.filtering.local_records.len()),
         ]),
+        optional_addons: [config.addons.dnscrypt.is_some().then_some("dnscrypt-proxy")]
+            .into_iter()
+            .flatten()
+            .collect(),
         ipv6: "BLOCKED_ON_SERVER; CLIENT_ENFORCEMENT_NOT_VERIFIED",
         no_activity_logs: "CONFIGURED; RUNTIME_UNKNOWN",
         live_apply: "UNSUPPORTED: timed rollback, reboot recovery and SSH gates not met",
-        files: vec![
-            "WireGuard config (secret)",
-            "server.nft",
-            "unbound.conf",
-            "shadowborn-firewall.service",
-            "shadowborn-dns.service",
-            "WireGuard service drop-in",
-            "99-shadowborn.conf",
-        ],
+        files,
         required_operator_checks: vec![
             "WAN/default routes and tunnel subnet collisions",
             "existing nftables/UFW/firewalld/Docker ownership",
@@ -183,12 +192,18 @@ table ip shadowborn_nat {{
 pub fn unbound(config: &crate::Config) -> Result<String> {
     config.validate()?;
     let prefix = config.prefix()?;
+    let upstream = if config.addons.dnscrypt.is_some() {
+        "127.0.0.1@5354"
+    } else {
+        "9.9.9.9@853#dns.quad9.net\n    forward-addr: 149.112.112.112@853#dns.quad9.net"
+    };
     Ok(format!(
         r#"# Dedicated VPN resolver. No includes, persistent cache, remote control or logging.
 server:
     interface: {address}
     access-control: 0.0.0.0/0 refuse
     access-control: {subnet} allow
+    do-not-query-localhost: {deny_localhost}
     do-ip4: yes
     do-ip6: no
     do-udp: yes
@@ -200,7 +215,7 @@ server:
     pidfile: ""
     verbosity: 0
     use-syslog: no
-    logfile: ""
+    logfile: "/dev/null"
     log-queries: no
     log-replies: no
     log-servfail: no
@@ -213,20 +228,30 @@ server:
     minimal-responses: yes
     prefetch: no
     tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"
-    # DNSSEC validation is delegated to Quad9; local validation is NOT claimed.
+    # Local DNSSEC validation is NOT claimed; evaluate the selected upstream.
     module-config: "iterator"
 {filtering}remote-control:
     control-enable: no
 forward-zone:
     name: "."
-    forward-tls-upstream: yes
+    forward-tls-upstream: {tls}
     forward-first: no
-    forward-addr: 9.9.9.9@853#dns.quad9.net
-    forward-addr: 149.112.112.112@853#dns.quad9.net
+    forward-addr: {upstream}
 "#,
         address = prefix.address,
         subnet = prefix.cidr(),
-        filtering = config.filtering.unbound_rules()
+        filtering = config.filtering.unbound_rules(),
+        upstream = upstream,
+        tls = if config.addons.dnscrypt.is_some() {
+            "no"
+        } else {
+            "yes"
+        },
+        deny_localhost = if config.addons.dnscrypt.is_some() {
+            "no"
+        } else {
+            "yes"
+        }
     ))
 }
 pub fn client_template(state: &State, name: &str) -> Result<String> {
@@ -255,6 +280,13 @@ pub fn bundle(state: &State) -> Result<BTreeMap<String, String>> {
     files.insert(format!("{wg}.conf"), server_wireguard(state)?);
     files.insert("server.nft".into(), server_firewall(state)?);
     files.insert("unbound.conf".into(), unbound(&state.config)?);
+    if let Some(dnscrypt) = &state.config.addons.dnscrypt {
+        files.insert("dnscrypt-proxy.toml".into(), dnscrypt.render()?);
+        files.insert(
+            "shadowborn-dnscrypt.service".into(),
+            include_str!("../../../packaging/systemd/shadowborn-dnscrypt.service").into(),
+        );
+    }
     files.insert(
         "99-shadowborn.conf".into(),
         "# IPv4 forwarding only; do not change unrelated sysctls.\nnet.ipv4.ip_forward = 1\n"
@@ -263,5 +295,15 @@ pub fn bundle(state: &State) -> Result<BTreeMap<String, String>> {
     files.insert("shadowborn-firewall.service".into(),format!("[Unit]\nDescription=Shadowborn owned server firewall\nBefore=wg-quick@{wg}.service\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/sbin/nft -f /etc/shadowborn/server.nft\nStandardOutput=null\nStandardError=null\nLimitCORE=0\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nCapabilityBoundingSet=CAP_NET_ADMIN\n\n[Install]\nWantedBy=multi-user.target\n"));
     files.insert("shadowborn-dns.service".into(),format!("[Unit]\nDescription=Shadowborn VPN-only Unbound resolver\nRequires=wg-quick@{wg}.service\nAfter=wg-quick@{wg}.service\nBindsTo=wg-quick@{wg}.service\n\n[Service]\nType=simple\nUser=unbound\nGroup=unbound\nExecStart=/usr/sbin/unbound -d -c /etc/shadowborn/unbound.conf\nRestart=on-failure\nRestartSec=5\nStandardOutput=null\nStandardError=null\nLimitCORE=0\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nPrivateDevices=yes\nProtectKernelTunables=yes\nProtectKernelModules=yes\nProtectControlGroups=yes\nRestrictAddressFamilies=AF_INET AF_UNIX\nCapabilityBoundingSet=CAP_NET_BIND_SERVICE\nAmbientCapabilities=CAP_NET_BIND_SERVICE\n\n[Install]\nWantedBy=multi-user.target\n"));
     files.insert("wg-quick-shadowborn.conf".into(),"[Unit]\nRequires=shadowborn-firewall.service\nAfter=shadowborn-firewall.service\n\n[Service]\nStandardOutput=null\nStandardError=null\nLimitCORE=0\n".into());
+    if state.config.addons.dnscrypt.is_some() {
+        let unit = files
+            .get_mut("shadowborn-dns.service")
+            .expect("DNS unit was inserted");
+        *unit = unit.replacen(
+            "[Unit]",
+            "[Unit]\nWants=shadowborn-dnscrypt.service\nAfter=shadowborn-dnscrypt.service",
+            1,
+        );
+    }
     Ok(files)
 }

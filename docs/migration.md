@@ -7,8 +7,7 @@ explicitly excludes history-retaining modules and authorizes optional services
 where activity collection can be disabled. No such services are installed yet;
 there are no project-owned SIEM/history modules or data to delete.
 
-Implement independent, opt-in resolver adapters first: Pi-hole FTL in headless
-privacy mode and dnscrypt-proxy with an explicitly pinned resolver, no bootstrap
+Implement an independent, opt-in dnscrypt-proxy adapter with an explicitly pinned resolver, no bootstrap
 fallback or downloaded resolver lists. Preserve Unbound/filtering and the default
 DoT path. Validate actual binaries in disposable namespace/chroot labs; expose
 no new public ports, API or web dashboard. Config/state and service generation
@@ -16,6 +15,16 @@ must reject weakened logging policies and report remaining VM gates as UNKNOWN.
 Remove recording SIEM/IDS/metrics modules from the supported product scope;
 document reasons rather than erasing host logs or existing user data. Additional
 applications remain gated by evidence, not assumed compliant from one log flag.
+
+## Completion repair — 2026-11-15
+
+Baseline 5f72f29 plus unfinished addon edits in Cargo.lock/core config/render.
+Repair the broken compile and stamp format, remove the unverified Pi-hole draft,
+finish pinned DoH rendering/CLI/tests, and add a separately exported client
+firewall with namespace leak tests. Preserve existing state/default Quad9 and
+legacy packages. No live workstation/network changes are authorized here.
+Pi-hole is not rejected just because it has a RAM cache: the draft failed startup,
+logging, binding and lifecycle verification and contained invalid configuration.
 
 ## Mistborn feature expansion
 

@@ -36,6 +36,9 @@ pub struct Setup {
     /// Optional local TOML filtering policy; never downloaded automatically.
     #[arg(long)]
     policy: Option<PathBuf>,
+    /// Local file containing one pinned DoH stamp for dnscrypt-proxy.
+    #[arg(long)]
+    dnscrypt_stamp: Option<PathBuf>,
 }
 
 impl Setup {
@@ -52,6 +55,12 @@ impl Setup {
         config.server.tunnel_ipv4.clone_from(&self.tunnel_ipv4);
         if let Some(path) = &self.policy {
             config.filtering = shadowborn_core::Filtering::parse(&platform::read_policy(path)?)?;
+        }
+        if let Some(path) = &self.dnscrypt_stamp {
+            config.addons.dnscrypt = Some(shadowborn_core::Dnscrypt {
+                stamp: platform::read_policy(path)?.trim().to_owned(),
+            });
+            config.dns.upstream = "dnscrypt-proxy".into();
         }
         config.validate()?;
         platform::validate_recipient(&self.recipient)?;

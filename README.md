@@ -150,6 +150,8 @@ before using the profile on a working workstation.
 | Check domain/IP policy | `shadowborn --config config/server.example.toml policy check --input config/filtering.example.toml` |
 | Import offline policy | `sudo shadowborn policy import --input /root/filtering.toml --confirm` |
 | Revoke an offline authorization | `sudo shadowborn peer revoke --name laptop --confirm` |
+| Configure offline pinned DoH | `sudo shadowborn dns configure --stamp-file /root/upstream.stamp --confirm` |
+| Export client firewall for VM review | `sudo shadowborn client lockdown render --output /root/client-review` |
 | Inspect reported status | `shadowborn status` |
 
 Replace `PUBLIC_KEY` with the device's actual public key. State operations require

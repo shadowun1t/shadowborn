@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+mod dns;
 mod policy;
 mod setup;
 use clap::{Parser, Subcommand};
@@ -104,6 +105,21 @@ enum ServerCommand {
 #[derive(Subcommand)]
 enum DnsCommand {
     Status,
+    /// Configure an upstream in offline authorization state, then render anew.
+    Configure {
+        #[arg(
+            long,
+            conflicts_with = "quad9_dot",
+            required_unless_present = "quad9_dot"
+        )]
+        stamp_file: Option<PathBuf>,
+        #[arg(long)]
+        quad9_dot: bool,
+        #[arg(long)]
+        confirm: bool,
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 #[derive(Subcommand)]
 enum FirewallCommand {
@@ -176,6 +192,11 @@ enum ClientCommand {
 }
 #[derive(Subcommand)]
 enum LockdownCommand {
+    /// Export a persistent client policy for isolated VM review; no activation.
+    Render {
+        #[arg(long)]
+        output: PathBuf,
+    },
     Plan,
     Status,
     Enable {
@@ -394,11 +415,7 @@ fn execute(cli: &Cli) -> Result<()> {
         | Commands::Server {
             command: ServerCommand::Status,
         } => status(cli),
-        Commands::Dns {
-            command: DnsCommand::Status,
-        } => emit(
-            serde_json::json!({"supported_upstream":"quad9-dot","availability":"UNKNOWN","transport_verified":"NOT_TESTED","query_logging_runtime":"UNKNOWN","probes_issued":false}),
-        ),
+        Commands::Dns { command } => dns::execute(cli, command),
         Commands::Peer { command } => peer_command(cli, command),
         Commands::Client {
             command: ClientCommand::Profile { name, output },
@@ -409,6 +426,22 @@ fn execute(cli: &Cli) -> Result<()> {
                 shadowborn_core::client_template(&state, name)?.as_bytes(),
             )?;
             println!("Secret STANDARD template written; insert the device private key locally. No strict protection installed.");
+            Ok(())
+        }
+        Commands::Client {
+            command:
+                ClientCommand::Lockdown {
+                    command: LockdownCommand::Render { output },
+                },
+        } => {
+            platform::require_root()?;
+            let config = config(cli)?;
+            let files = shadowborn_core::client_lockdown(&config)?;
+            platform::create_private(output)?;
+            for (name, text) in files {
+                platform::write_new_secret(&output.join(name), text.as_bytes())?;
+            }
+            println!("Client firewall review bundle written. Not activated; read CLIENT-REVIEW.txt and docs/client-kill-switch.md.");
             Ok(())
         }
         Commands::Client {

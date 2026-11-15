@@ -18,7 +18,7 @@ container pins, credentials, install script or screenshots were imported.
 | Coppercloud IP filtering | Implemented as configured IPv4 destination sets in owned nftables tables; synthetic block/reload tests. IPv6 is currently blocked as a whole. |
 | Private service names | Implemented under `shadowborn.home.arpa`; names do not grant network access or install an application. |
 | Pi-hole | Planned optional blocking UI/backend; exact-version no-history, network inventory, API, file and journal gates remain. |
-| DNSCrypt | Planned alternative upstream transport; existing path is authenticated DoT. No resolver bootstrap plaintext fallback is allowed. |
+| dnscrypt-proxy | Pinned DoH adapter implemented and namespace tested; DNSCrypt protocol 1/ODoH remain unavailable. No bootstrap plaintext fallback. See dnscrypt.md. |
 | Web management portal | Planned separate VPN-only surface after safe backend lifecycle; no public management listener, Docker socket access or root web process. |
 | MFA Internet access | Planned second-factor policy gate tied to the individual WG identity; fail closed on expiry/reboot, no stored session timeline. |
 | Users/groups and delegated administration | Planned minimal authorization configuration with separate device identities and scoped permissions. |

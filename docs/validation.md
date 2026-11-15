@@ -1,5 +1,37 @@
 # Shadowborn validation
 
+## Repair and executable DNS/client checks — 2026-11-15
+
+Baseline: `5f72f29` plus unfinished edits to core config/render and Cargo files;
+those edits did not compile. The Pi-hole draft contained invalid keys, mismatched
+DNS ports and an unverified logging lifecycle; its generator is removed. This is
+not a general claim that a RAM cache is forbidden or Pi-hole can never be adapted.
+
+| Check | Executed result |
+| --- | --- |
+| Full local validation | PASS: `scripts/validate.sh`, format, Clippy `-D warnings`, **77 workspace tests**, release build, CLI/packaging tests, 10 legacy integration checks and both namespace labs. |
+| DNS configuration | PASS: pinned DoH stamp validation (including truncation, injection, VLP certificate pins and rejected bootstrap fields), offline dry-run/import/default restore, unchanged state after invalid input. |
+| Actual encrypted upstream | PASS: dnscrypt-proxy 2.1.20 + Unbound 1.26.2 against synthetic authenticated HTTPS; A/AAAA, UDP/TCP, domain block, restart, proxy outage and wrong TLS name/hash. No plaintext fallback response. |
+| Scoped no-history evidence | PASS: DoH lab process stdout/stderr empty; all fixture files identical before/after traffic and failures. No service/journal/reboot/swap certification. |
+| Client egress policy | PASS: real WG endpoint with fwmark, output blocked before WG exists, physical IPv4/IPv6 and TCP/UDP DNS denied, fallback route denied, table survives WG removal and preserves unrelated rules on reload. Boot/suspend/provider integration remain untested. |
+| Generated configurations | PASS: actual unbound-checkconf and systemd-analyze verify for DNS/proxy/client/server firewall units. Executable paths relocated to extracted tools; syntax is not runtime sandbox certification. |
+| QR/keys and legacy | PASS: encrypted QR independently decoded, protected file/state operations and revocation-safe offline restore; all legacy smoke checks. No workstation changes. |
+| Shell / diff | PASS: ShellCheck 0.11.0 and diff whitespace checks. |
+| Rust advisory query | OSV querybatch for all 62 crates.io package versions in Cargo.lock returned no advisories on 2026-11-15. cargo-audit unavailable; this does not cover kernel, native tools or future advisories. |
+
+Reproduction: `scripts/validate.sh` now includes the guarded namespace suite.
+Use the test overrides documented below, plus `SHADOWBORN_DNSCRYPT`. CI fetches
+upstream 2.1.20 using tests/tools/fetch_dnscrypt.py and a fixed SHA-256 archive
+digest; no distro proxy service is installed. Initial experiments used Debian 2.1.18+ds1-1; final configuration requires
+2.1.20 for certificate hash checking on every connection. CI itself has not been executed here.
+
+**Open release gates:** automatic transactional server apply/SSH rollback,
+reboot-safe live peer reconciliation, verified strict boot/provider activation,
+Debian/Ubuntu/aarch64 VM acceptance, service/journal/reboot no-history audit,
+real VPS/phone enrollment and performance. Optional portal/MFA/application adapters
+are not implemented. Current code is usable for protected provisioning and
+isolated/manual VM evaluation; it is not a completed production release.
+
 ## Mistborn filtering continuation
 
 Baseline `7a4be2d`, clean checkout; same isolated Kali x86_64 lab and extracted

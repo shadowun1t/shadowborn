@@ -8,6 +8,7 @@ Required evidence: authorized HTTPS/egress IP; IPv4/IPv6 captures on both physic
 and WG interfaces; DoT certificate failure; public DNS recursion denied; SSH
 preserved; peer/host/metadata isolation; persistent revoke; boot and failure
 recovery; no activity logs after traffic, DNS failure, restart and reboot.
-Strict tests require an implementation first: boot ordering, Wi-Fi/Ethernet,
+A rendered client policy now passes namespace tests. Its installer/provider
+integration still needs implementation and validation: boot ordering, Wi-Fi/Ethernet,
 sleep, alternate routes, WG down, endpoint migration and container boundaries.
 All unexecuted cases stay NOT TESTED. Never upload real keys or customer captures.

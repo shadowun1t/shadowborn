@@ -12,7 +12,8 @@ fn main() -> Result<()> {
     let output = PathBuf::from(&args[1]);
     let state: State =
         serde_json::from_slice(&fs::read(input)?).context("invalid synthetic fixture")?;
-    let files = bundle(&state)?;
+    let mut files = bundle(&state)?;
+    files.extend(shadowborn_core::client_lockdown(&state.config)?);
     fs::create_dir(&output)?;
     for (name, data) in files {
         let mut file = fs::OpenOptions::new()

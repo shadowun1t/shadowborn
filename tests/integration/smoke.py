@@ -184,7 +184,7 @@ def main():
             units = base / "units"
             units.mkdir()
             paths = []
-            for source in (ROOT / "packaging/systemd").glob("*.service"):
+            for source in (ROOT / "packaging/systemd").glob("shadowmist*.service"):
                 content = source.read_text().replace("/usr/local/sbin/shadowmistd", str(DAEMON))
                 content = content.replace("/usr/local/bin/shadowmist", str(CLI))
                 target = units / source.name

@@ -36,3 +36,20 @@ Instrukcje techniczne są po angielsku: [serwer](installation-server.md),
 Tryb strict, automatyczny rollback sieci i obsługa urządzeń na działającym serwerze
 pozostają niewdrożone. To nie jest gotowe wydanie produkcyjne ani gwarancja
 anonimowości. Dotychczasowy klient ma osobny [poradnik Shadow Mist](legacy/README.md).
+
+## Szyfrowany DNS i ochrona klienta — 2026-11-15
+
+Działa opcjonalny upstream DoH przez dnscrypt-proxy, z przypiętym adresem IPv4 i
+weryfikacją certyfikatu. Konfiguracja: `shadowborn dns configure --stamp-file
+/root/upstream.stamp --confirm`, a następnie ponowny `render`. Nowy `setup`
+przyjmuje też `--dnscrypt-stamp`. Domyślnie pozostaje Quad9 DoT.
+
+`shadowborn client lockdown render --output /root/client-review` generuje
+trwały firewall klienta i jednostki systemd do przeglądu w VM. Testy namespace
+potwierdzają blokadę bezpośredniego IPv4/IPv6/DNS, także po utracie trasy lub
+usunięciu tunelu. Automatyczna aktywacja, boot i suspend nie są zweryfikowane.
+Szczegóły: [DNS](dnscrypt.md) i [ochrona klienta](client-kill-switch.md).
+
+Pi-hole nie jest dostarczany: niedokończony adapter miał niepoprawną konfigurację
+i nie przeszedł testu uruchomienia. Blokowanie reklam/domen i prywatne rekordy DNS
+realizuje Unbound. Zwykły cache operacyjny w RAM nie jest zakazaną historią ruchu.

@@ -55,6 +55,9 @@ artifact or paste it into a terminal transcript. No network is changed by render
 No reuse of an existing output directory is permitted. After changing peers,
 retire all stale exports and render anew.
 
+If the bundle includes dnscrypt-proxy, also follow [its adapter guide](dnscrypt.md)
+before activation; install its generated config/unit alongside Unbound.
+
 ## Manual activation in a disposable VM
 
 This is an operator-controlled lab recipe, not a safe remote production installer.

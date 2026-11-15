@@ -5,6 +5,7 @@ All keys and profiles are synthetic lab identities and deleted with the fixture.
 No root privileges or changes to host networking/services are requested.
 """
 import json
+import base64
 import os
 from pathlib import Path
 import re
@@ -124,6 +125,28 @@ def main():
         cli('policy', 'import', '--input', '/root/filtering.toml', '--confirm')
         assert json.loads(cli('plan').stdout)['policy_entries']['blocked_domains'] == 0
         print('PASS: offline filtering import, dry-run, canonical-state planning, invalid-list atomicity and no activity output')
+        def lp(value):
+            value = value.encode()
+            return bytes([len(value)]) + value
+        stamp = 'sdns://' + base64.urlsafe_b64encode(b'\x02' + b'\0'*8 + lp('198.18.0.53') + b'\0' + lp('resolver.example') + lp('/dns-query')).decode().rstrip('=')
+        (jail / 'root/upstream.stamp').write_text(stamp)
+        before_dns = state_path.read_bytes()
+        cli('dns', 'configure', '--stamp-file', '/root/upstream.stamp', '--dry-run')
+        assert state_path.read_bytes() == before_dns
+        cli('dns', 'configure', '--stamp-file', '/root/upstream.stamp', '--confirm')
+        assert json.loads(cli('dns', 'status').stdout)['configured_upstream'] == 'dnscrypt-proxy'
+        cli('render', '--output', '/root/doh-review')
+        assert 'forward-tls-upstream: no' in (jail / 'root/doh-review/unbound.conf').read_text()
+        assert (jail / 'root/doh-review/shadowborn-dnscrypt.service').is_file()
+        before_dns = state_path.read_bytes()
+        (jail / 'root/upstream.stamp').write_text('sdns://BAD')
+        cli('dns', 'configure', '--stamp-file', '/root/upstream.stamp', '--confirm', ok=False)
+        assert state_path.read_bytes() == before_dns
+        cli('dns', 'configure', '--quad9-dot', '--confirm')
+        cli('client', 'lockdown', 'render', '--output', '/root/client-lockdown')
+        assert (jail / 'root/client-lockdown/lockdown.nft').is_file()
+        cli('client', 'lockdown', 'render', '--output', '/root/client-lockdown', ok=False)
+        print('PASS: DNS configuration dry-run/atomic rejection/restore and file-only client policy export')
         private = subprocess.run([wg, 'genkey'], capture_output=True, check=True).stdout
         public = subprocess.run([wg, 'pubkey'], input=private, capture_output=True, check=True).stdout.decode().strip()
         cli('peer', 'add', '--name', 'synthetic', '--public-key', public)

@@ -5,6 +5,8 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      SHADOWBORN_DNSCRYPT: ${{ runner.temp }}/shadowborn-dnscrypt-proxy
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -15,12 +17,14 @@ jobs:
       - run: cargo test --locked --workspace
       - run: cargo build --locked --release --workspace
       - run: sudo apt-get update && sudo apt-get install -y shellcheck wireguard-tools nftables unbound age qrencode zbar-tools openssl
+      - run: python3 tests/tools/fetch_dnscrypt.py "$SHADOWBORN_DNSCRYPT"
       - run: shellcheck scripts/*.sh
       - run: cargo build --locked -p shadowborn-core --example render_lab
       - run: python3 tests/integration/shadowborn.py
       - run: python3 tests/integration/provisioning.py
       - run: python3 tests/integration/generated.py
       - run: python3 tests/namespaces/shadowborn.py
+      - run: python3 tests/namespaces/dnscrypt.py
       - run: python3 tests/integration/smoke.py --skip-daemon
   aarch64-check:
     runs-on: ubuntu-latest

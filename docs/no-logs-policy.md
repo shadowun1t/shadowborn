@@ -53,3 +53,11 @@ Source-level configuration and state tests are automated. Actual Unbound,
 service/journal behavior after traffic, outage, revocation and reboot is UNKNOWN
 until the full disposable VM suite has run. Do not advertise verified no-log
 runtime compliance based on configuration rendering alone.
+
+The optional dnscrypt-proxy adapter has no query/NX log sinks, source downloads,
+disk cache or system DNS bootstrap. Its loopback upstream and static DoH stamp
+are configuration only. The namespace test confirms empty process output and
+unchanged fixture files through traffic, proxy restart/outage and TLS failure.
+This is not a journal/reboot/swap certification. See dnscrypt.md. The unfinished
+Pi-hole generator was removed; no FTL compliance is claimed. RAM caches alone
+do not violate this policy, but retained activity timelines do.

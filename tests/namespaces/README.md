@@ -20,3 +20,9 @@ private names, WAN denial, restart and TLS-name failure are checked. No external
 DNS/Internet is used. `SHADOWBORN_UNBOUND` may point at an extracted test binary.
 The run checks for extra lab files and query/client values in captured process
 output; real systemd/journal/reboot no-log compliance remains UNKNOWN.
+
+Client policy is now exercised before WG creation and after route/interface loss,
+including physical IPv4/IPv6 and TCP/UDP DNS denial. Boot/suspend remain untested.
+Run `python3 tests/namespaces/dnscrypt.py` for the real proxy + Unbound synthetic
+HTTPS path; set `SHADOWBORN_DNSCRYPT` and `SHADOWBORN_UNBOUND` if extracted binaries
+are used. This test fails (rather than passes) when its required tools are absent.

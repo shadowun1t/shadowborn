@@ -32,3 +32,7 @@ transactional_rollback = true
 
 # Optional [filtering] policy defaults to empty lists for existing configurations.
 # See filtering.example.toml (standalone input to setup --policy / policy import).
+
+# Optional pinned DoH via dnscrypt-proxy: set dns.upstream = "dnscrypt-proxy"
+# AND [addons.dnscrypt] stamp = "sdns://..." (a real, validated protocol-2 stamp).
+# Prefer setup --dnscrypt-stamp or dns configure --stamp-file; see docs/dnscrypt.md.

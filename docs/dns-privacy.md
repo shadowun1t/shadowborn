@@ -16,10 +16,10 @@ query/reply/SERVFAIL logs, disabled syslog, disabled remote control and no perio
 statistics/cache persistence. Verify with the installed unbound-checkconf and
 actual service/journal observations. Transport privacy, DNS availability and
 DNSSEC are different: local DNSSEC validation is not enabled in this preview;
-Quad9 performs its upstream policy. Runtime DoT authentication is NOT TESTED.
+Quad9 performs its upstream policy. Synthetic DoT authentication and wrong-name failure pass the namespace lab; real Quad9 and VM lifecycle remain unverified.
 
 Resolver outage must not authorize client physical DNS. Standard clients lack
-that enforcement; the required strict integration is not yet implemented.
+that enforcement; a generated client firewall is now namespace-tested, but automated activation and boot certification remain unfinished.
 The upstream resolver sees requested names; external logging cannot be controlled.
 See the [official Unbound configuration reference](https://unbound.docs.nlnetlabs.nl/en/latest/manpages/unbound.conf.html).
 
@@ -53,3 +53,6 @@ records. Limit listener access to authorized tunnel peers, avoid resolver loops,
 and expose no public dashboard. If any activity sink cannot be disabled, do not
 ship the integration. Current Pi-hole integration/compliance: **NOT IMPLEMENTED /
 UNKNOWN**. Disabling statistics means losing the usual per-client query charts.
+
+The optional [dnscrypt-proxy adapter](dnscrypt.md) supports pinned DoH without
+bootstrap resolvers or transport fallback. It is selected explicitly per gateway.

@@ -13,6 +13,23 @@ pub struct Config {
     pub operations: Operations,
     #[serde(default)]
     pub filtering: crate::Filtering,
+    #[serde(default)]
+    pub addons: Addons,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Addons {
+    /// Optional pinned DoH upstream via dnscrypt-proxy.
+    #[serde(default)]
+    pub dnscrypt: Option<Dnscrypt>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Dnscrypt {
+    /// A literal-address DoH stamp; prevents cleartext bootstrap DNS.
+    pub stamp: String,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -187,10 +204,15 @@ impl Config {
         }
         if self.dns.mode != "vpn-resolver"
             || !self.dns.bind_to_vpn_only
-            || self.dns.upstream != "quad9-dot"
+            || self.dns.upstream
+                != if self.addons.dnscrypt.is_some() {
+                    "dnscrypt-proxy"
+                } else {
+                    "quad9-dot"
+                }
             || self.dns.query_logging
         {
-            bail!("only VPN-scoped Quad9 DoT without query logging is supported")
+            bail!("VPN-scoped DNS without query logging and matching upstream/addon required")
         }
         if !self.privacy.no_activity_logs
             || self.privacy.telemetry
@@ -205,6 +227,9 @@ impl Config {
             bail!("explicit approval and rollback policy required")
         }
         self.filtering.validate(p)?;
+        if let Some(dnscrypt) = &self.addons.dnscrypt {
+            dnscrypt.validate()?;
+        }
         Ok(())
     }
 }

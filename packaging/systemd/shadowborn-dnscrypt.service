@@ -1,0 +1,31 @@
+[Unit]
+Description=Shadowborn pinned encrypted DNS upstream
+Before=shadowborn-dns.service
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+ExecStart=/usr/sbin/dnscrypt-proxy -config /etc/shadowborn/dnscrypt-proxy.toml
+Restart=on-failure
+RestartSec=5
+StandardOutput=null
+StandardError=null
+LimitCORE=0
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_UNIX
+CapabilityBoundingSet=
+RestrictSUIDSGID=yes
+LockPersonality=yes
+UMask=0077
+UnsetEnvironment=HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy SSLKEYLOGFILE
+
+[Install]
+WantedBy=multi-user.target
