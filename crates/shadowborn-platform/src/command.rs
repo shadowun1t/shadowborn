@@ -11,7 +11,20 @@ use std::{
 /// Fixed program allowlist, no shell, bounded output, timeout, suppressed stderr.
 /// Secret input uses a pipe, never argv; inherited descriptors are not logged.
 pub fn run(program: &str, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {
-    if !["wg", "age", "qrencode"].contains(&program) {
+    if ![
+        "wg",
+        "age",
+        "qrencode",
+        "nft",
+        "ip",
+        "systemctl",
+        "systemd-run",
+        "sysctl",
+        "unbound-checkconf",
+        "ss",
+    ]
+    .contains(&program)
+    {
         bail!("unsupported subprocess")
     }
     let executable = ["/usr/bin", "/usr/sbin"]

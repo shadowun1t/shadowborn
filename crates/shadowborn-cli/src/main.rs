@@ -49,12 +49,18 @@ enum Commands {
         #[arg(long)]
         output: PathBuf,
     },
-    /// Live application remains unsupported; dry-run prints the provisioning plan.
+    /// Activate a fresh server with independent rollback; commit after a test peer.
     Apply {
         #[arg(long)]
         confirm: bool,
         #[arg(long)]
+        console_verified: bool,
+        #[arg(long)]
         dry_run: bool,
+    },
+    Deployment {
+        #[command(subcommand)]
+        command: DeploymentCommand,
     },
     Status,
     Server {
@@ -97,6 +103,31 @@ enum Commands {
         #[arg(long)]
         plan: bool,
     },
+}
+#[derive(Subcommand)]
+enum DeploymentCommand {
+    Status,
+    Commit {
+        #[arg(long)]
+        transaction: String,
+        #[arg(long)]
+        peer: String,
+        #[arg(long)]
+        egress_verified: bool,
+        #[arg(long)]
+        confirm: bool,
+    },
+    /// Resume current authorization into owned config/kernel; no activity history.
+    Reconcile,
+    /// Recover pending deployment (also invoked by timer and boot service).
+    Recover {
+        #[arg(long)]
+        boot_only: bool,
+        #[arg(long)]
+        transaction: Option<String>,
+    },
+    #[command(hide = true)]
+    Activate,
 }
 #[derive(Subcommand)]
 enum ServerCommand {
@@ -269,7 +300,7 @@ fn peer_command(cli: &Cli, cmd: &PeerCommand) -> Result<()> {
             platform::require_root()?;
             let store = platform::Store::open(&cli.state_dir, false)?;
             let before = store.load()?;
-            platform::require_offline(&before.config)?;
+            let live = platform::lifecycle::peer_preflight(&cli.state_dir, &before)?;
             let mut after = before.clone();
             let mut artifacts: Vec<&Path> = Vec::new();
             match cmd {
@@ -328,7 +359,10 @@ fn peer_command(cli: &Cli, cmd: &PeerCommand) -> Result<()> {
                 }
                 return Err(error);
             }
-            println!("Provisioning authorization updated. No running gateway was modified; previous exports are stale.");
+            if live {
+                platform::lifecycle::peers_changed(&store, &after)?;
+            }
+            println!("Authorization updated durably; owned live gateway reconciled when deployed. Previous exports are stale.");
             Ok(())
         }
     }
@@ -407,10 +441,39 @@ fn execute(cli: &Cli) -> Result<()> {
             Ok(())
         }
         Commands::Apply { dry_run: true, .. } => provisioning_plan(cli),
-        Commands::Apply { confirm: ok, .. } => {
+        Commands::Apply {
+            confirm: ok,
+            console_verified,
+            ..
+        } => {
             confirm(*ok)?;
-            platform::unsupported("automatic live apply")
+            let transaction = platform::lifecycle::apply(&cli.state_dir, *console_verified)?;
+            emit(
+                serde_json::json!({"deployment":"pending","transaction":transaction,"rollback_seconds":120,"next":"Test Internet and DNS with an enrolled peer, then deployment commit --transaction ID --peer NAME --egress-verified --confirm"}),
+            )
         }
+        Commands::Deployment { command } => match command {
+            DeploymentCommand::Status => emit(platform::lifecycle::status(&cli.state_dir)?),
+            DeploymentCommand::Commit {
+                transaction,
+                peer,
+                egress_verified,
+                confirm: ok,
+            } => {
+                confirm(*ok)?;
+                platform::lifecycle::commit(&cli.state_dir, transaction, peer, *egress_verified)?;
+                println!(
+                    "Deployment committed. Boot reconciliation enabled; rollback timer cancelled."
+                );
+                Ok(())
+            }
+            DeploymentCommand::Reconcile => platform::lifecycle::reconcile(&cli.state_dir),
+            DeploymentCommand::Recover {
+                boot_only,
+                transaction,
+            } => platform::lifecycle::recover(&cli.state_dir, *boot_only, transaction.as_deref()),
+            DeploymentCommand::Activate => platform::lifecycle::activate(&cli.state_dir),
+        },
         Commands::Status
         | Commands::Server {
             command: ServerCommand::Status,

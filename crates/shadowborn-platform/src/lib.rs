@@ -1,6 +1,7 @@
 //! File-only provisioning boundary; live network activation is intentionally gated.
 mod command;
 mod enrollment;
+pub mod lifecycle;
 mod storage;
 use anyhow::{bail, Result};
 pub use command::*;

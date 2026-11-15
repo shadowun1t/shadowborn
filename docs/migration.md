@@ -1,5 +1,18 @@
 # Shadowborn migration plan
 
+## Transactional activation and VM acceptance — 2026-11-15
+
+Baseline `01692a9`, clean checkout. Implement a fresh-server-only Linux activation
+transaction with protected intent/state, independently armed systemd rollback,
+explicit commit after an operator test peer, and boot-time recovery. No network
+changes on the Kali workstation. Add canonical-state reconciliation before each
+WG start and after peer changes; revocation must be durable before live removal.
+Client lockdown needs provider startup dependencies and a separate confirmed
+installation flow. Test the real release binary in disposable QEMU VMs, including
+rollback on interruption/reboot, live revoke/restart, and suspend/resume where
+the virtual hardware supports it. Preserve all legacy packages and user data.
+
+
 ## Optional modules without retained activity history
 
 Baseline `055ff66` is clean and includes the filtering/QR work. The owner now
