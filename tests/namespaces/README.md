@@ -5,12 +5,11 @@ Build `cargo build --locked -p shadowborn-core --example render_lab`, then run
 user/network namespaces, synthetic addresses and ephemeral keys. It never runs
 privileged commands in the developer host's network namespace.
 
-Executed coverage: actual kernel WireGuard handshake, generated nft syntax and
-owned-table replacement, scoped IPv4 NAT/return traffic, host/metadata/spoofed
-source denial, and traffic loss after explicit kernel peer removal. This is not
-a test of automatic CLI live revoke, real Internet, DNS/DoT, strict client,
-boot/recovery or actual VM portability. Missing kernel capabilities/tools are
-SKIPPED or explicit failures, never converted into VERIFIED protection.
+Two independently authorized peers reach a controlled origin through kernel WG
+and scoped IPv4 NAT. They cannot reach each other, host management or metadata.
+Spoofed source addresses are dropped. Tests exercise the strict client across a
+second veth uplink, direct fallback routes and deletion of the WG interface.
+Missing kernel capabilities or tools are reported as skips or explicit failures.
 
 The filtering continuation also tests IPv4 deny sets, overlapping CIDRs, adding
 and removing a block on reload, and preservation of an unrelated table. If
@@ -19,10 +18,10 @@ upstream entirely inside the isolated lab. A/AAAA/TCP DNS blocks, allow exceptio
 private names, WAN denial, restart and TLS-name failure are checked. No external
 DNS/Internet is used. `SHADOWBORN_UNBOUND` may point at an extracted test binary.
 The run checks for extra lab files and query/client values in captured process
-output; real systemd/journal/reboot no-log compliance remains UNKNOWN.
+output. Service output and reboots are tested separately in [QEMU](../vm/README.md).
 
 Client policy is now exercised before WG creation and after route/interface loss,
-including physical IPv4/IPv6 and TCP/UDP DNS denial. Boot/suspend remain untested.
+including physical IPv4/IPv6 and TCP/UDP DNS denial.
 Run `python3 tests/namespaces/dnscrypt.py` for the real proxy + Unbound synthetic
 HTTPS path; set `SHADOWBORN_DNSCRYPT` and `SHADOWBORN_UNBOUND` if extracted binaries
 are used. This test fails (rather than passes) when its required tools are absent.

@@ -6,9 +6,9 @@
 | VPS provider/operator | HTTPS independently protects application content | Egress destinations and other metadata remain visible |
 | External attacker | Per-device WG authentication; SSH allowlist; VPN-only resolver | Host/kernel vulnerabilities and management credentials |
 | Compromised peer | Per-key /32 source restriction, default peer/host/private-network deny | Its authorized Internet use; implementation defects |
-| Lost laptop | Unique key/PSK and explicit revocation | Stored credentials and past disclosures; live revoke currently unsupported |
+| Lost laptop | Unique key/PSK and explicit revocation | Past disclosures and exported credentials require independent custody |
 | Admin error | Schema checks, offline locks, atomic files, compare-before-write | Manual VM deployment can lock out SSH; console/snapshot required |
-| Tunnel/DNS/server outage | Strict client should deny bypass | Strict mode not implemented; standard client can bypass when routes disappear |
+| Tunnel/DNS/server outage | Committed client firewall drops physical application traffic | Early boot and privileged link-layer traffic require separate checks. Standard clients can send direct traffic after route loss |
 | Privileged malware | Outside the VPN boundary | Kernel, raw sockets, firmware, secrets, application data |
 
 No anonymous/untraceable, post-quantum, zero-provider-log or uninterrupted-Internet

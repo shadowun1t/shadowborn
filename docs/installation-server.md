@@ -1,13 +1,13 @@
-# Fresh server installation (provisioning preview)
+# Fresh server installation
 
 For a shorter file-preparation flow with the first client's profile and QR, use
-[setup](quickstart-qr.md), then return to manual activation below. Do not run
+[setup and managed activation](quickstart-qr.md). Do not run
 `init` after `setup`: it has already generated the gateway identity and state.
 
-Target evaluation platforms: Debian and Ubuntu systemd VMs, initially x86_64.
-No OS version is production-certified yet. Use a disposable owned VM and its
-provider console. Do not run the network activation section on the developer
-laptop. There is no automated apply/rollback implementation in this preview.
+The managed procedure was exercised on Debian 13 and Ubuntu 24.04 x86_64
+systemd VMs. Use a fresh owned VM and verify access to its console. Public VPS
+egress and provider firewall policies require an independent test at the
+chosen provider. Use the separate client guide on the laptop.
 
 ## Build and install files
 
@@ -58,6 +58,32 @@ retire all stale exports and render anew.
 If the bundle includes dnscrypt-proxy, also follow [its adapter guide](dnscrypt.md)
 before activation; install its generated config/unit alongside Unbound.
 
+## Managed server activation
+
+Use the canonical state initialized above. Prepare the first device profile and
+have its operator available before starting the two-minute window. For a strict
+Linux client, export with `client profile --strict` and prepare the client helper
+before starting either trial. Verify a second key-based SSH session and the
+out-of-band console. Confirm your cloud firewall allows the selected UDP port and
+the SSH administration source.
+
+```bash
+sudo shadowborn plan --host --json
+sudo shadowborn apply --console-verified --confirm
+sudo shadowborn deployment status
+# Start the prepared client. Verify DNS, HTTPS and the exit IP at an owned destination.
+sudo shadowborn deployment commit --transaction SERVER_ID --peer laptop --egress-verified --confirm
+sudo shadowborn status
+```
+
+Use the ID returned by apply. Commit checks a recent handshake for the named
+active peer in memory. The operator verifies DNS and HTTPS independently. With
+no commit, an independent timer rolls the pending deployment back. After a
+commit, systemd starts the firewall, WireGuard and VPN resolver at boot.
+`peer revoke --name laptop --confirm` also updates the owned running gateway.
+For a pending failure, run `sudo shadowborn deployment recover` from the
+console. For a committed deployment use the [recovery guide](admin-recovery.md).
+
 ## Manual activation in a disposable VM
 
 This is an operator-controlled lab recipe, not a safe remote production installer.
@@ -81,17 +107,17 @@ sudo unbound-checkconf /root/shadowborn-review/unbound.conf
 sudo install -d -m 0700 /etc/wireguard
 sudo install -m 0600 /root/shadowborn-review/wg-shadowborn.conf /etc/wireguard/wg-shadowborn.conf
 sudo install -m 0644 /root/shadowborn-review/server.nft /etc/shadowborn/server.nft
-sudo install -m 0644 /root/shadowborn-review/unbound.conf /etc/shadowborn/unbound.conf
+sudo install -m 0644 /root/shadowborn-review/unbound.conf /etc/unbound/shadowborn.conf
 sudo install -m 0644 /root/shadowborn-review/shadowborn-firewall.service /etc/systemd/system/
 sudo install -m 0644 /root/shadowborn-review/shadowborn-dns.service /etc/systemd/system/
 sudo install -d /etc/systemd/system/wg-quick@wg-shadowborn.service.d
 sudo install -m 0644 /root/shadowborn-review/wg-quick-shadowborn.conf /etc/systemd/system/wg-quick@wg-shadowborn.service.d/shadowborn.conf
-sudo install -m 0644 /root/shadowborn-review/99-shadowborn.conf /etc/sysctl.d/99-shadowborn.conf
-sudo sysctl -p /etc/sysctl.d/99-shadowborn.conf
 sudo systemctl daemon-reload
 sudo systemctl enable --now shadowborn-firewall.service
 sudo systemctl enable --now wg-quick@wg-shadowborn.service
 sudo systemctl enable --now shadowborn-dns.service
+sudo install -m 0644 /root/shadowborn-review/99-shadowborn.conf /etc/sysctl.d/99-shadowborn.conf
+sudo sysctl -p /etc/sysctl.d/99-shadowborn.conf
 ```
 
 Unbound package installation may start the distro's own resolver. Inspect its

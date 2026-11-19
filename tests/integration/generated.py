@@ -34,13 +34,16 @@ def main():
         if checker:
             conf = bundle / 'unbound.conf'
             # Only relocate the working directory; resolver policy stays exact.
-            conf.write_text(conf.read_text().replace('directory: "/etc/shadowborn"', f'directory: "{bundle}"'))
+            conf.write_text(conf.read_text().replace('directory: "/etc/unbound"', f'directory: "{bundle}"'))
             subprocess.run([checker, conf], check=True)
             print('PASS: generated policy parsed by actual unbound-checkconf')
         else:
             print('SKIPPED: unbound-checkconf unavailable')
         proxy = os.environ.get('SHADOWBORN_DNSCRYPT') or shutil.which('dnscrypt-proxy')
         if shutil.which('systemd-analyze') and unbound and proxy:
+            client_unit = bundle / 'shadowborn-client-lockdown.service'
+            client_unit.write_text(client_unit.read_text().replace('/usr/local/bin/shadowborn-client-lockdown',
+                                                                  str(ROOT/'packaging/client/lockdown.py')))
             dns = bundle / 'shadowborn-dns.service'
             dns.write_text(dns.read_text().replace('/usr/sbin/unbound', str(unbound)))
             proxy_unit = bundle / 'shadowborn-dnscrypt.service'

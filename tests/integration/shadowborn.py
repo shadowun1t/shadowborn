@@ -28,7 +28,7 @@ def main():
         for operation in (['plan', '--json'], ['init', '--dry-run'], ['apply', '--dry-run']):
             plan = json.loads(run(cmd + operation).stdout)
             assert plan['network_mutations'] is False
-            assert plan['stage'] == 'PROVISIONING_ONLY'
+            assert plan['stage'] == 'PLAN'
             assert not state.exists()
         run(cmd + ['validate'])
         policy = ROOT / 'config/filtering.example.toml'
@@ -57,7 +57,7 @@ def main():
             assert not (base / 'setup').exists()
         run(cmd + ['apply', '--confirm'], ok=False)
         run(cmd + ['client', 'lockdown', 'enable', '--confirm'], ok=False)
-        assert json.loads(run(cmd + ['client', 'lockdown', 'status']).stdout)['enforced'] is False
+        assert json.loads(run(cmd + ['client', 'lockdown', 'status']).stdout)['enforced'] is None
         assert json.loads(run(cmd + ['dns', 'status']).stdout)['transport_verified'] == 'NOT_TESTED'
         if os.geteuid() != 0:
             run(cmd + ['init'], ok=False)
@@ -116,6 +116,26 @@ def main():
         run(uninstall)
         assert not binary.exists()
         print('PASS: staged install/update/uninstall, conflicts and legacy separation')
+        client_stage = base / 'client-stage'
+        client_install = [ROOT / 'scripts/install-client-lockdown.sh']
+        destination = ['--destdir', client_stage]
+        run(client_install + destination + ['--dry-run'])
+        assert not client_stage.exists()
+        run(client_install + destination)
+        helper = client_stage / 'usr/local/bin/shadowborn-client-lockdown'
+        assert helper.is_file() and not (client_stage / 'etc').exists()
+        assert not (client_stage / 'usr/local/bin/shadowborn').exists()
+        run([helper, '--help'])
+        run(client_install + ['--update'] + destination)
+        edited = client_stage/'usr/local/share/shadowborn-client/lockdown.nft.in'
+        saved = edited.read_bytes()
+        edited.write_bytes(saved + b'# administrator edit\n')
+        run(client_install + ['--uninstall'] + destination, ok=False)
+        assert helper.exists()
+        edited.write_bytes(saved)
+        run(client_install + ['--uninstall'] + destination)
+        assert not helper.exists()
+        print('PASS: separate client package, file-only install/update/removal and conflict refusal')
         outside = base / 'outside'
         outside.mkdir()
         (stage / 'usr/local/bin/shadowborn').symlink_to(outside / 'victim')

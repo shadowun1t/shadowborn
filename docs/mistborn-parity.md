@@ -10,10 +10,10 @@ container pins, credentials, install script or screenshots were imported.
 
 | Reference capability | Shadowborn implementation / remaining work |
 | --- | --- |
-| WireGuard and per-device profiles | Offline provisioning, separate keys/PSKs and protected standard imports; kernel tunnel/NAT tested in namespaces. |
+| WireGuard and per-device profiles | Separate device keys and PSKs, encrypted imports, kernel tunnel and scoped IPv4 NAT exercised on Debian and Ubuntu VMs. |
 | Mobile QR | Encrypted QR/profile issuance and independent decode tests; actual phone app acceptance remains untested. |
-| Installation and upgrades | File packaging and `setup`; automatic activation, independent timed rollback and reboot recovery still required. |
-| Live peer management | Offline add/disable/revoke exists; kernel/config convergence and durable live revocation remain required. |
+| Installation and upgrades | Independent server/client packages, managed activation, timed rollback and recovery of pending gateway deployments at boot. |
+| Live peer management | Committed gateway changes reconcile authorization, WG and the firewall. Revocation survives a service restart and gateway reboot. |
 | DNS ad/malware blocking | Implemented through Unbound local policy, hosts/domain imports and allow exceptions; actual namespace DNS tests. This does not install Pi-hole. |
 | Coppercloud IP filtering | Implemented as configured IPv4 destination sets in owned nftables tables; synthetic block/reload tests. IPv6 is currently blocked as a whole. |
 | Private service names | Implemented under `shadowborn.home.arpa`; names do not grant network access or install an application. |
@@ -62,10 +62,10 @@ integration unavailable and document the conflict.
 
 ## Implementation order and release gates
 
-1. Complete gateway activation/recovery and immediate, reboot-safe peer revoke;
-   preserve the existing SSH/admin firewall with independently armed rollback.
-2. Complete strict Linux client enforcement, IPv4/IPv6 failure-path testing and
-   actual Debian/Ubuntu VM acceptance. No UI can substitute for these checks.
+1. Reproduce the tested gateway activation, independent rollback, SSH access
+   and reboot-safe live revocation on the operator's intended VPS.
+2. Verify the strict client on the intended physical laptop, including its real
+   network provider, uplink switches and sleep transitions.
 3. Add the VPN-only portal, minimal authorization and second-factor gate on top
    of the verified local control plane; browser sessions remain current security
    state, never a historical access journal.
@@ -79,6 +79,6 @@ reason to expose ports publicly. Container integration must account for DNAT and
 forwarding paths explicitly. Keep package updates separate from network policy;
 replacing upstream tags and restarting services blindly is not an update strategy.
 
-Core runtime certification, strict protection and all application adapters remain
-open work. Use [validation](validation.md) for actual evidence and
+Public provider and hardware acceptance and the optional application adapters
+remain open. Use [validation](validation.md) for measured gateway and client behavior and
 [filtering](filtering.md) for the functions implemented in this continuation.

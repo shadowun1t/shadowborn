@@ -1,4 +1,4 @@
-//! File-only provisioning boundary; live network activation is intentionally gated.
+//! Protected state, Linux tool invocation and managed gateway lifecycle.
 mod command;
 mod enrollment;
 pub mod lifecycle;
@@ -26,8 +26,9 @@ pub fn require_offline(config: &Config) -> Result<()> {
         )
         .is_ok()
         || Path::new("/etc/systemd/system/shadowborn-firewall.service").exists()
+        || std::fs::symlink_metadata("/var/lib/shadowborn/deployment.json").is_ok()
     {
-        bail!("provisioning-only operation refused: gateway appears deployed; live reconciliation is unsupported")
+        bail!("provisioning-only operation refused: gateway appears deployed; use a managed deployment for live peer changes")
     }
     Ok(())
 }

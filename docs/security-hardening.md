@@ -9,8 +9,10 @@ Do not remove global host security logs.
 Generated services suppress stdout/stderr and core dumps. Unbound runs as the
 package user with bind-service capability; the firewall oneshot retains NET_ADMIN
 and has a read-only filesystem sandbox. WG remains the standard distro service
-with a per-instance output-suppression/ordering drop-in. These properties need
-real service validation, especially distribution AppArmor and boot ordering.
+with a per-instance output-suppression/ordering drop-in. The default resolver
+loaded its dedicated configuration under the packaged AppArmor profile in the
+Debian and Ubuntu VM suite. See the [validation matrix](validation.md) for boot
+and service-output checks.
 
 Secret state uses private paths, no-follow reads, link/owner/mode checks, bounded
 reads, exclusive locks, fsynced atomic replacement and stale-state rejection.
@@ -20,4 +22,6 @@ Memory copies/swap and administrator-controlled command capture remain limitatio
 
 No global flush, NAT66, blanket forwarding, automatic route detection approval,
 automatic reconnect, production key rotation or privileged workstation testing.
-No dependency CVE clearance or signed release/SBOM is claimed until performed.
+CI checks the locked Rust registry packages against OSV. The
+[licensing guide](licensing.md) includes the Rust workspace SBOM command.
+Release signing and a native host-package inventory and vulnerability review remain open.

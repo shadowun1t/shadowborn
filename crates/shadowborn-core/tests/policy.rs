@@ -114,6 +114,8 @@ fn firewall_and_wireguard_bound_each_peer() {
     let client = client_template(&state, "laptop").unwrap();
     assert!(client.contains("0.0.0.0/0, ::/0"));
     assert!(client.contains("<DEVICE_PRIVATE_KEY>"));
+    assert!(!client.contains("PersistentKeepalive"));
+    assert!(with_nat_keepalive(client.clone(), true).ends_with("PersistentKeepalive = 25\n"));
     assert!(!client.contains(state.server_private_key.expose()));
 }
 #[test]
@@ -209,4 +211,15 @@ fn complete_import_keeps_device_secrets_out_of_authorization_state() {
     assert!(client_profile(&state, "phone", &private).is_err());
     state.disable("phone", true).unwrap();
     assert!(client_profile(&state, "phone", &private).is_err());
+}
+
+#[test]
+fn restoring_an_old_backup_preserves_a_rotated_psk() {
+    let mut state = fixture();
+    state
+        .add("device".into(), key('D'), Secret::new(key('E')).unwrap())
+        .unwrap();
+    let backup = state.clone();
+    state.peers[0].psk = Some(Secret::new(key('F')).unwrap());
+    assert_eq!(state.restore_authorization(backup).unwrap(), state);
 }

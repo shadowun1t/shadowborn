@@ -98,7 +98,7 @@ def isolated():
         bundle = base / 'bundle'
         run([ROOT / 'target/debug/examples/render_lab', fixture, bundle])
         resolver = bundle / 'unbound.conf'
-        resolver.write_text(resolver.read_text().replace('directory: "/etc/shadowborn"', f'directory: "{base}"'))
+        resolver.write_text(resolver.read_text().replace('directory: "/etc/unbound"', f'directory: "{base}"'))
         proxy_config = bundle / 'dnscrypt-proxy.toml'
         # Only the lab's synthetic CA is added; TLS verification remains enabled.
         env = {k: v for k, v in os.environ.items() if 'proxy' not in k.lower()}

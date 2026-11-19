@@ -7,8 +7,9 @@ Never collect or persist browsing URLs, DNS queries, destination-flow history,
 packet payloads/captures, connection history, observed source IPs, location,
 handshake timelines or per-peer traffic series. No analytics, metrics exporter,
 crash reporting, remote collector or persistent troubleshooting mode exists.
-The CLI performs no periodic recording. `status` currently reports UNKNOWN for
-runtime properties rather than collecting or caching peer traffic information.
+The CLI performs no periodic recording. A privileged `status` inspects current
+interface, firewall and service state. DNS privacy and egress requiring an
+independent client observation remain unknown or untested.
 
 Filtering lists contain domains and CIDRs deliberately chosen by the operator,
 plus private service-name configuration. They are never populated from queries,
@@ -20,7 +21,13 @@ incompatible with this policy; optional applications need separate verification.
 Necessary persistent configuration: server private/public key, peer public keys,
 per-peer PSKs, assigned tunnel addresses, names, active/disabled/revoked state,
 validated server policy. Revoked entries lose their PSK but keep a tombstone to
-prevent reuse/restore. Private directories are 0700 and files 0600. Configuration
+prevent reuse/restore. Managed activation also stores its current rollback
+configuration and hashes of owned rules. An empty pending-authorization marker
+wakes systemd if a writer exits during a peer change. It contains no identity or
+timestamp and is removed after reconciliation. The strict client stores the pinned
+endpoint, allowed DHCP interfaces, transaction state and configuration hashes.
+Temporary LAN exceptions expire in the kernel. Secret directories are 0700
+and secret files 0600. Configuration
 backups are age encrypted with an explicit recipient; retained copies contain
 secrets and authorization inventory, never traffic. The operator controls backup
 retention and must retire outdated exported profiles/bundles. Memory buffers are
@@ -49,10 +56,16 @@ kernel memory. Shadowborn does not control these boundaries. Legacy Shadow Mist
 has its own existing status/event semantics and is not covered by this new
 server-owned-service claim.
 
-Source-level configuration and state tests are automated. Actual Unbound,
-service/journal behavior after traffic, outage, revocation and reboot is UNKNOWN
-until the full disposable VM suite has run. Do not advertise verified no-log
-runtime compliance based on configuration rendering alone.
+On 2026-11-19 the Debian 13 and Ubuntu 24.04 KVM tests sent synthetic DNS and
+HTTPS traffic, interrupted the tunnel and resolver, revoked a peer and rebooted.
+The tests checked the service-process journal streams for the scoped WG instance
+and Shadowborn units, the project configuration/state inventory, and file names
+under `/var/log` and `/var/cache`. The inspected streams were empty and the
+expected gateway files contained no test query. PID 1 can record unit starts
+and stops. Host swap, third-party services, provider records and other resolver
+versions remain outside these observations. This policy limits retrospective
+diagnosis: there is no per-device history to recover after an incident.
+[Test scope and reproduction](validation.md).
 
 The optional dnscrypt-proxy adapter has no query/NX log sinks, source downloads,
 disk cache or system DNS bootstrap. Its loopback upstream and static DoH stamp

@@ -1,5 +1,7 @@
 use anyhow::{bail, Context, Result};
 mod dns;
+mod lockdown;
+use lockdown::LockdownCommand;
 mod policy;
 mod setup;
 use clap::{Parser, Subcommand};
@@ -14,7 +16,7 @@ use std::{
 #[command(
     name = "shadowborn",
     version,
-    about = "Shadowborn gateway provisioning; live apply and strict activation are release-gated"
+    about = "Provision and administer a self-hosted WireGuard gateway"
 )]
 struct Cli {
     #[arg(long, global = true, default_value = "/etc/shadowborn/config.toml")]
@@ -43,6 +45,9 @@ enum Commands {
     Plan {
         #[arg(long)]
         json: bool,
+        /// Perform read-only preflight on this initialized, fresh server.
+        #[arg(long)]
+        host: bool,
     },
     /// Export a new root-only directory. Does not install or activate networking.
     Render {
@@ -117,6 +122,13 @@ enum DeploymentCommand {
         #[arg(long)]
         confirm: bool,
     },
+    /// Tear down an owned gateway and retain canonical state and revocations.
+    Remove {
+        #[arg(long)]
+        confirm: bool,
+        #[arg(long)]
+        console_verified: bool,
+    },
     /// Resume current authorization into owned config/kernel; no activity history.
     Reconcile,
     /// Recover pending deployment (also invoked by timer and boot service).
@@ -128,6 +140,8 @@ enum DeploymentCommand {
     },
     #[command(hide = true)]
     Activate,
+    #[command(hide = true)]
+    FirewallLoad,
 }
 #[derive(Subcommand)]
 enum ServerCommand {
@@ -173,6 +187,9 @@ enum PeerCommand {
         recipient: String,
         #[arg(long)]
         bundle: PathBuf,
+        /// Maintain an idle NAT mapping for this device (25 seconds).
+        #[arg(long)]
+        nat_keepalive: bool,
         /// Optional PNG QR encrypted to the same age recipient; never printed.
         #[arg(long)]
         qr_bundle: Option<PathBuf>,
@@ -211,6 +228,12 @@ enum PeerCommand {
 #[derive(Subcommand)]
 enum ClientCommand {
     Profile {
+        /// Maintain an idle NAT mapping for this device (25 seconds).
+        #[arg(long)]
+        nat_keepalive: bool,
+        /// Add the routing mark used by the strict Linux client firewall.
+        #[arg(long)]
+        strict: bool,
         #[arg(long)]
         name: String,
         #[arg(long)]
@@ -219,24 +242,6 @@ enum ClientCommand {
     Lockdown {
         #[command(subcommand)]
         command: LockdownCommand,
-    },
-}
-#[derive(Subcommand)]
-enum LockdownCommand {
-    /// Export a persistent client policy for isolated VM review; no activation.
-    Render {
-        #[arg(long)]
-        output: PathBuf,
-    },
-    Plan,
-    Status,
-    Enable {
-        #[arg(long)]
-        confirm: bool,
-    },
-    Disable {
-        #[arg(long)]
-        confirm: bool,
     },
 }
 fn config(cli: &Cli) -> Result<Config> {
@@ -257,10 +262,7 @@ fn confirm(value: bool) -> Result<()> {
     Ok(())
 }
 fn status(cli: &Cli) -> Result<()> {
-    let configured = cli.state_dir.join("state.json").exists();
-    emit(
-        serde_json::json!({"schema_version":1,"state_path_visible":configured,"tunnel":"UNKNOWN","egress":"NOT_TESTED","dns_privacy":"UNKNOWN","activity_logging_runtime":"UNKNOWN","strict_client":"UNSUPPORTED","scope":"No runtime activity was queried or persisted; provisioning is not proof of deployment"}),
-    )
+    emit(platform::lifecycle::runtime_status(&cli.state_dir)?)
 }
 fn provisioning_plan(cli: &Cli) -> Result<()> {
     match fs::symlink_metadata(cli.state_dir.join("state.json")) {
@@ -300,7 +302,11 @@ fn peer_command(cli: &Cli, cmd: &PeerCommand) -> Result<()> {
             platform::require_root()?;
             let store = platform::Store::open(&cli.state_dir, false)?;
             let before = store.load()?;
-            let live = platform::lifecycle::peer_preflight(&cli.state_dir, &before)?;
+            let restricting = matches!(
+                cmd,
+                PeerCommand::Revoke { .. } | PeerCommand::Disable { .. }
+            );
+            let live = platform::lifecycle::peer_preflight(&cli.state_dir, &before, restricting)?;
             let mut after = before.clone();
             let mut artifacts: Vec<&Path> = Vec::new();
             match cmd {
@@ -314,13 +320,19 @@ fn peer_command(cli: &Cli, cmd: &PeerCommand) -> Result<()> {
                     recipient,
                     bundle,
                     qr_bundle,
+                    nat_keepalive,
                     accept_server_key_generation,
                 } => {
                     if !accept_server_key_generation {
                         bail!("requires --accept-server-key-generation: this generates the client private key on the server")
                     }
-                    let encrypted =
-                        platform::issue(&mut after, name, recipient, qr_bundle.is_some())?;
+                    let encrypted = platform::issue(
+                        &mut after,
+                        name,
+                        recipient,
+                        qr_bundle.is_some(),
+                        *nat_keepalive,
+                    )?;
                     platform::write_new_secret(bundle, &encrypted.profile)?;
                     artifacts.push(bundle);
                     if let (Some(path), Some(qr)) = (qr_bundle, encrypted.qr) {
@@ -353,7 +365,13 @@ fn peer_command(cli: &Cli, cmd: &PeerCommand) -> Result<()> {
                 }
                 _ => unreachable!(),
             }
-            if let Err(error) = store.save(Some(&before), &after) {
+            let persist = || -> Result<()> {
+                if live {
+                    platform::lifecycle::prepare_peer_change(&store)?;
+                }
+                store.save(Some(&before), &after)
+            };
+            if let Err(error) = persist() {
                 for path in artifacts {
                     let _ = fs::remove_file(path);
                 }
@@ -371,10 +389,7 @@ fn execute(cli: &Cli) -> Result<()> {
     match &cli.command {
         Commands::Policy { command } => policy::execute(cli, command),
         Commands::Version => {
-            println!(
-                "shadowborn {} (provisioning preview)",
-                env!("CARGO_PKG_VERSION")
-            );
+            println!("shadowborn {} (gateway preview)", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         Commands::Setup(args) => {
@@ -405,7 +420,7 @@ fn execute(cli: &Cli) -> Result<()> {
                 )
             });
             emit(
-                serde_json::json!({"schema_version":1,"tools":tools.into_iter().collect::<std::collections::BTreeMap<_,_>>(),"network_mutations":false,"live_apply":"UNSUPPORTED","kernel_wireguard":"NOT_TESTED","ssh_safety":"NOT_TESTED","no_logs_runtime":"UNKNOWN","legacy_client":"independent; not inspected or changed"}),
+                serde_json::json!({"schema_version":1,"tools":tools.into_iter().collect::<std::collections::BTreeMap<_,_>>(),"network_mutations":false,"live_apply":"FRESH_DEBIAN_UBUNTU_CONSOLE_TRANSACTION","kernel_wireguard":"NOT_TESTED","ssh_safety":"NOT_TESTED","no_logs_runtime":"UNKNOWN","legacy_client":"independent; not inspected or changed"}),
             )
         }
         Commands::Validate => {
@@ -413,7 +428,12 @@ fn execute(cli: &Cli) -> Result<()> {
             println!("Server configuration valid (deployment readiness NOT TESTED).");
             Ok(())
         }
-        Commands::Plan { .. } => provisioning_plan(cli),
+        Commands::Plan { host, .. } => {
+            if *host {
+                platform::lifecycle::check_host(&cli.state_dir, &read_state(cli)?)?;
+            }
+            provisioning_plan(cli)
+        }
         Commands::Init { dry_run: true } => provisioning_plan(cli),
         Commands::Init { dry_run: false } => {
             platform::require_root()?;
@@ -467,11 +487,21 @@ fn execute(cli: &Cli) -> Result<()> {
                 );
                 Ok(())
             }
+            DeploymentCommand::Remove {
+                confirm: ok,
+                console_verified,
+            } => {
+                confirm(*ok)?;
+                platform::lifecycle::remove(&cli.state_dir, *console_verified)?;
+                println!("Owned deployment removed. Configuration, keys and revocations retained.");
+                Ok(())
+            }
             DeploymentCommand::Reconcile => platform::lifecycle::reconcile(&cli.state_dir),
             DeploymentCommand::Recover {
                 boot_only,
                 transaction,
             } => platform::lifecycle::recover(&cli.state_dir, *boot_only, transaction.as_deref()),
+            DeploymentCommand::FirewallLoad => platform::lifecycle::firewall_load(&cli.state_dir),
             DeploymentCommand::Activate => platform::lifecycle::activate(&cli.state_dir),
         },
         Commands::Status
@@ -481,43 +511,29 @@ fn execute(cli: &Cli) -> Result<()> {
         Commands::Dns { command } => dns::execute(cli, command),
         Commands::Peer { command } => peer_command(cli, command),
         Commands::Client {
-            command: ClientCommand::Profile { name, output },
+            command:
+                ClientCommand::Profile {
+                    name,
+                    output,
+                    strict,
+                    nat_keepalive,
+                },
         } => {
             let state = read_state(cli)?;
             platform::write_new_secret(
                 output,
-                shadowborn_core::client_template(&state, name)?.as_bytes(),
+                shadowborn_core::with_nat_keepalive(
+                    shadowborn_core::linux_client_template(&state, name, *strict)?,
+                    *nat_keepalive,
+                )
+                .as_bytes(),
             )?;
-            println!("Secret STANDARD template written; insert the device private key locally. No strict protection installed.");
+            println!("Secret template written. Insert the device private key locally before activating the client.");
             Ok(())
         }
         Commands::Client {
-            command:
-                ClientCommand::Lockdown {
-                    command: LockdownCommand::Render { output },
-                },
-        } => {
-            platform::require_root()?;
-            let config = config(cli)?;
-            let files = shadowborn_core::client_lockdown(&config)?;
-            platform::create_private(output)?;
-            for (name, text) in files {
-                platform::write_new_secret(&output.join(name), text.as_bytes())?;
-            }
-            println!("Client firewall review bundle written. Not activated; read CLIENT-REVIEW.txt and docs/client-kill-switch.md.");
-            Ok(())
-        }
-        Commands::Client {
-            command:
-                ClientCommand::Lockdown {
-                    command: LockdownCommand::Plan | LockdownCommand::Status,
-                },
-        } => emit(
-            serde_json::json!({"state":"UNSUPPORTED","enforced":false,"required":"persistent inet default-deny firewall; endpoint/fwmark allowlist; boot/suspend/IPv6 packet tests"}),
-        ),
-        Commands::Client {
-            command: ClientCommand::Lockdown { .. },
-        } => platform::unsupported("strict client lockdown"),
+            command: ClientCommand::Lockdown { command },
+        } => lockdown::execute(cli, command),
         Commands::Firewall {
             command: FirewallCommand::Plan,
         } => {
@@ -554,12 +570,13 @@ fn execute(cli: &Cli) -> Result<()> {
                 return Ok(());
             }
             let store = platform::Store::open(&cli.state_dir, false)?;
+            platform::require_offline(&current.config)?;
             store.save(Some(&current), &next)?;
             println!("Offline configuration restored with current revocations preserved. No network changes.");
             Ok(())
         }
         Commands::Uninstall { plan: true } => emit(
-            serde_json::json!({"network_mutations":false,"installer":"scripts/uninstall-server.sh","retained":["configuration","keys","authorization state"],"live_deployment":"manual recovery required before file removal"}),
+            serde_json::json!({"network_mutations":false,"installer":"scripts/uninstall-server.sh","retained":["configuration","keys","authorization state"],"live_deployment":"deployment remove --console-verified --confirm before file removal"}),
         ),
         Commands::Uninstall { plan: false } => {
             platform::unsupported("automatic removal of a live gateway; use uninstall --plan")

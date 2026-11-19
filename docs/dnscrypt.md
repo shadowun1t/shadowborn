@@ -52,7 +52,7 @@ root-owned 0644 under the already reviewed `/etc/shadowborn` and systemd paths:
 - generated `unbound.conf` and `shadowborn-dns.service` as in the server guide
 
 Validate with `dnscrypt-proxy -check -config /etc/shadowborn/dnscrypt-proxy.toml`,
-`unbound-checkconf /etc/shadowborn/unbound.conf`, and `systemd-analyze verify`
+`unbound-checkconf /etc/unbound/shadowborn.conf`, and `systemd-analyze verify`
 before activation. Start/reload only through the reviewed VM procedure. Unbound
 Wants/After starts the proxy; a proxy outage leaves Unbound's private/block rules
 available and external queries fail. Restarting the proxy restores service.

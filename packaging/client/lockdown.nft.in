@@ -1,0 +1,14 @@
+table inet shadowborn_client {
+    comment "@OWNER@"
+    set temporary_lan { type ifname . ipv4_addr; flags timeout; timeout 5m; size 1; }
+    chain output {
+        type filter hook output priority filter; policy drop;
+        oifname "lo" accept
+        oifname "@INTERFACE@" meta oifkind "wireguard" accept
+        meta mark 51820 ip daddr @ENDPOINT@ udp dport @PORT@ accept
+        oifname . ip daddr @temporary_lan tcp dport { 80, 443 } accept
+@DHCP@    }
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+    }
+}

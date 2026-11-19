@@ -16,10 +16,14 @@ query/reply/SERVFAIL logs, disabled syslog, disabled remote control and no perio
 statistics/cache persistence. Verify with the installed unbound-checkconf and
 actual service/journal observations. Transport privacy, DNS availability and
 DNSSEC are different: local DNSSEC validation is not enabled in this preview;
-Quad9 performs its upstream policy. Synthetic DoT authentication and wrong-name failure pass the namespace lab; real Quad9 and VM lifecycle remain unverified.
+Quad9 performs its upstream policy. The namespace suite tests synthetic DoT
+authentication and rejects the wrong name. The VM suite exercises the tunnel
+resolver under systemd and AppArmor on Debian and Ubuntu. Public Quad9 service
+and reachability from a specific hosting provider require a separate check.
 
-Resolver outage must not authorize client physical DNS. Standard clients lack
-that enforcement; a generated client firewall is now namespace-tested, but automated activation and boot certification remain unfinished.
+The strict client firewall blocks physical DNS, including while the resolver or
+tunnel is down. The standard import alone requires separate host firewall policy
+for that protection. See the [VM and namespace tests](validation.md).
 The upstream resolver sees requested names; external logging cannot be controlled.
 See the [official Unbound configuration reference](https://unbound.docs.nlnetlabs.nl/en/latest/manpages/unbound.conf.html).
 
@@ -27,8 +31,8 @@ See the [official Unbound configuration reference](https://unbound.docs.nlnetlab
 
 Mistborn's gateway and convenient device enrollment are design inspiration; no
 code or service stack is imported. The current build deliberately has no Pi-hole
-dependency. Finish safe gateway activation, live revocation, strict client policy
-and actual VM packet/no-log tests first.
+dependency. Each additional resolver needs its own runtime packet, output and
+retention tests before inclusion.
 
 The proposed later path is client → WireGuard → VPN-only Pi-hole → local Unbound
 → authenticated DoT upstream. Pi-hole would add blocking; it would not add

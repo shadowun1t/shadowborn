@@ -5,13 +5,13 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    env:
-      SHADOWBORN_DNSCRYPT: ${{ runner.temp }}/shadowborn-dnscrypt-proxy
     steps:
       - uses: actions/checkout@v4
+      - run: echo "SHADOWBORN_DNSCRYPT=$RUNNER_TEMP/shadowborn-dnscrypt-proxy" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - run: python3 scripts/audit-lock.py
       - run: cargo fmt --all -- --check
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace

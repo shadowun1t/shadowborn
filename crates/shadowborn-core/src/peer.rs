@@ -164,19 +164,19 @@ impl State {
             bail!("backup belongs to a different gateway configuration/key")
         }
         for current in &self.peers {
-            if current.status == PeerStatus::Active {
-                continue;
-            }
             if let Some(old) = backup
                 .peers
                 .iter_mut()
                 .find(|p| p.public_key == current.public_key)
             {
-                old.status = current.status;
-                if current.status == PeerStatus::Revoked {
-                    old.psk = None;
+                if old.status != PeerStatus::Revoked {
+                    if current.status != PeerStatus::Active {
+                        old.status = current.status;
+                    }
+                    // A stale backup must never restore an invalidated PSK.
+                    old.psk.clone_from(&current.psk);
                 }
-            } else {
+            } else if current.status != PeerStatus::Active {
                 backup.peers.push(current.clone());
             }
         }

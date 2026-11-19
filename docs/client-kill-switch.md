@@ -1,63 +1,104 @@
-# Persistent client firewall — VM review bundle
+# Persistent Linux client firewall
 
-`shadowborn client lockdown render --output /root/client-review` now exports
-nftables policy, a systemd unit and a WG unit drop-in using `--config`. This is
-file preparation; no policy is applied. Run on a trusted administration machine
-with the intended server configuration, then review on the client VM. The client
-needs only nftables, wg-quick and systemd, not a Shadowborn daemon.
+Use a separate Linux client with a tested local console and a standard
+WireGuard profile. The helper needs Python 3, systemd, nftables,
+wireguard-tools, iproute2 and working `resolvconf` integration. The server and
+client packages install independently. Python runs for administrative commands
+and once at boot. The kernel enforces the firewall while the helper is stopped.
 
-The owned `inet shadowborn_client` table denies output except loopback, the
-configured WG interface, explicitly marked UDP to the pinned server IP/port, and
-IPv4 DHCP broadcast (68 → 67). The fixed client `FwMark = 51820` must be placed in
-its profile's `[Interface]`; verify it does not collide with other routing marks.
-IPv6 physical traffic is denied. IPv6 WAN connectivity/NDP/DHCPv6 is unsupported;
-use an IPv4 WAN/static address or DHCPv4. DHCP unicast renewal is not excepted and
-may require broadcast rebinding. No LAN, captive portal, physical DNS, or arbitrary
-UDP endpoint exception is provided. Forwarding is denied, including container
-traffic; do not install on a router or a host needing forwarding.
+## Prepare and review on the client
 
-The table exists before WG and survives WG down/interface deletion. Stopping the
-firewall unit deliberately does not delete it. Another firewall's accept rule
-cannot undo this table's drop; privileged rule changes can. Table name collisions
-must be refused, not treated as ownership. Atomic reloading may replace only a
-table already established as owned. No nft log/nflog/counter is generated.
+On the gateway, export a Linux profile with the fixed WireGuard routing mark.
 
-## VM installation review
+```bash
+sudo shadowborn client profile --name laptop --strict --output /root/laptop.template
+```
 
-Use a disposable client VM with a working local/provider console and a snapshot.
-Do not use a remote SSH session to enable this on the existing workstation.
-Before applying: inspect nft/UFW/firewalld/Docker policy, routing marks, DNS
-managers (NetworkManager/resolved/resolvconf and legacy Shadow Mist), early boot
-networking and conflicting WG names. Review resolver hookup for the standard
-client's `DNS =` setting; no existing DNS manager configuration is overwritten.
+Transfer the template over an authenticated encrypted channel. Complete the
+private-key field on the laptop. From a trusted checkout on that laptop, install
+the completed file and the optional client helper.
 
-Install the reviewed firewall as `/etc/shadowborn-client/lockdown.nft` and unit
-as `/etc/systemd/system/shadowborn-client-lockdown.service`, root-owned, without
-replacing existing files. Install the WG drop-in for the selected unit instance.
-Run `nft -c -f` and `systemd-analyze verify` first. The unit orders before
-network-pre.target and WG, but **Before alone does not prevent a network manager
-from starting if firewall initialization fails**. Each network provider needs an
-explicit Requires/After dependency on the lockdown service. Test its startup
-failure and initramfs/pre-systemd network behavior before enabling boot startup.
-An installer that safely detects and configures those providers is not shipped.
-`enable`/`disable` remain rejected; render is not a verified strict activation.
+```bash
+sudo install -d -m 0700 /etc/wireguard
+sudo install -m 0600 /path/to/completed/profile.conf /etc/wireguard/wg-shadowborn.conf
+./scripts/install-client-lockdown.sh --dry-run
+sudo ./scripts/install-client-lockdown.sh
+sudo shadowborn-client-lockdown plan
+```
 
-For manual VM experiments, arm an independently reviewed rollback timer before
-applying. Such rollback removes strict protection and must be disclosed. Commit
-only after successful policy checks through the console. Emergency recovery from
-the console removes only `inet shadowborn_client` and the reviewed provider/WG
-drop-ins; preserve all unrelated tables. Never use a global ruleset flush.
+Use `--interface NAME` for a custom WG instance. The plan reads the profile and
+checks a literal IPv4 endpoint, full IPv4/IPv6 routes, the tunnel DNS address and
+`FwMark = 51820`. Profiles containing hooks or custom route tables fail validation.
+Review route table 51820, early networking, provider conflicts and resolver
+ownership. The helper checks NetworkManager, systemd-networkd and ifupdown. It
+refuses an active/enabled Shadow Mist service. A working Kali DoT installation
+needs separate compatibility testing.
 
-## Executed coverage
+The default assumes a static uplink. For DHCPv4 add
+`--dhcp-interface INTERFACE` to both plan and enable, once per approved uplink.
+This permits broadcast UDP from client port 68 to server port 67 on those
+interfaces. Unicast renewal may need to wait for broadcast rebinding. ARP and
+packet sockets used by some DHCP clients operate at link layer. These frames can
+be visible to the LAN. IPv6 WAN bootstrap and routed IPv6 egress are unsupported.
 
-The namespace lab installs the generated table **before** a WG client interface,
-then tests actual WG/NAT traffic using its mark, physical IPv4/IPv6 denial, TCP/UDP
-DNS denial, fallback route denial, reload preserving an unrelated table, server
-peer removal and interface deletion. None of these tests certify boot, suspend,
-multiple live NICs, DHCP/PF_PACKET behavior or remote rollback. PF_PACKET and
-privileged processes can bypass ordinary IP hooks. Local ARP and necessary link
-control are not encrypted. Hardware/kernel compromise is outside scope.
+## Try, verify and commit
 
-A server cannot enforce this on a laptop. Do not label a standard import or a
-rendered bundle as a verified strict client. Complete boot/failure/provider tests
-in tests/vm/README.md before making that claim.
+An outage during the trial interrupts direct connectivity, including remote SSH.
+Use the console. The trial lasts **120 seconds**. Timeout restores the prior
+ability to send direct traffic and stops a WG service started for that trial.
+WG must be stopped with automatic startup disabled before the trial. The helper
+suppresses WG service output before its first start. A pending trial also arms
+rollback at boot. A reboot before commit returns the client to its prior direct
+network access. A completed commit makes the firewall persistent.
+
+```bash
+sudo shadowborn-client-lockdown enable --confirm --console-verified
+sudo systemctl start wg-quick@wg-shadowborn.service
+sudo shadowborn-client-lockdown status
+# From the laptop, test DNS and HTTPS to your controlled origin and verify the VPS exit IP.
+sudo shadowborn-client-lockdown commit --transaction TRIAL_ID --egress-verified --confirm
+sudo systemctl enable wg-quick@wg-shadowborn.service
+```
+
+Use the transaction ID printed by enable. The server activation has its own
+transaction ID. The `shadowborn client lockdown` subcommands call the same
+file-installed helper when the Rust CLI is present.
+
+The output chain drops physical IPv4 and IPv6 traffic by default. It accepts
+loopback, the selected WireGuard interface, marked UDP to the exact endpoint
+and approved DHCP broadcasts. Forwarding is dropped. At boot the provider and
+WG units have explicit Requires/After dependencies on the firewall unit. A
+failed load blocks their startup. After systemd sleep returns, a short-lived helper
+checks whether the network provider discarded the WG routing rules. It asks
+systemd to restart an already active tunnel when those rules are missing. Stopping WG leaves the table in the kernel.
+Status compares its rules with the trial fingerprint and inspects installed boot
+dependencies. A mismatch or failed inspection yields an unknown enforcement
+state. Local DNS changes, external firewall reloads by root, initramfs networking,
+privileged raw sockets, containers and physical suspend need separate validation. [WireGuard routing](https://www.wireguard.com/netns/) · [systemd network targets](https://www.freedesktop.org/software/systemd/man/latest/systemd.special.html#network-pre.target)
+
+## Time-limited LAN or captive portal access
+
+From a committed client, allow HTTP/HTTPS to a single directly attached IPv4
+address with `sudo shadowborn-client-lockdown temporary-lan --uplink INTERFACE
+--address PORTAL_IP --seconds 120 --confirm`. Status displays `NOT_STRICT` during
+the exception. The kernel expires it within the selected interval (maximum five
+minutes), including if the helper exits. No DNS exception is added. Portals
+requiring DNS redirects or multiple hosts can remain unreachable.
+
+## Recovery
+
+From the console, stop the tunnel if needed. Disabling the firewall permits
+direct access again.
+
+```bash
+sudo systemctl stop wg-quick@wg-shadowborn.service
+sudo shadowborn-client-lockdown disable --confirm
+sudo ./scripts/install-client-lockdown.sh --uninstall
+```
+
+The helper removes its own table, unit and dependency files after checking
+ownership. A changed file/table stops automatic removal. Inspect it from the
+console. An interrupted uncommitted trial can also be cleared with the confirmed
+disable command. To migrate a pinned endpoint, stop the connection and review the
+new profile on an offline link before starting a new trial. Actual coverage is
+recorded in the [validation matrix](validation.md).

@@ -1,5 +1,30 @@
 # Shadowborn migration plan
 
+## Gateway and client acceptance, 2026-11-19
+
+The clean checkout at `599701f` has three Shadowborn crates, four Shadow Mist
+crates, an initial server activation transaction, an nftables client renderer
+and a QEMU transport. All 77 existing Rust tests passed before this work.
+The earlier preview guides predate the server transaction. The checkout remote
+points to `shadowun1t/shadowborn`; this work leaves Git hosting settings to the owner.
+For an older clone still pointing to `shadow-mist`, the owner can first confirm
+the intended GitHub account and then use
+`git remote set-url origin git@github.com:shadow-alpha01/shadowborn.git`.
+
+1. Exercise the installed CLI on a disposable systemd guest. Repair activation,
+   interrupted transactions and authorization reconciliation at their normal
+   entry points. Keep the canonical peer state authoritative across restart.
+2. Extend the client renderer with a separately installed, explicitly confirmed
+   lockdown workflow. Bind network-provider startup to firewall success and
+   verify rollback, tunnel loss and boot in an isolated client.
+3. Record actual packet, service and privacy checks, with separate commands for
+   fresh servers and standard clients. Keep external/provider and hardware
+   acceptance gates open until tested on those systems.
+
+Server packaging and client activation remain independent. The working Kali
+installation, its resolver, the four legacy crates and the Git remote are
+outside the migration.
+
 ## Transactional activation and VM acceptance — 2026-11-15
 
 Baseline `01692a9`, clean checkout. Implement a fresh-server-only Linux activation
@@ -62,8 +87,8 @@ require explicit operator action.
 
 Baseline inspected on 2026-10-30: clean tracked checkout at `e06bf37`, four
 `shadowmist-*` workspace crates, a local NetworkManager/resolved privacy client,
-no WireGuard server implementation. `origin` already points to
-`git@github.com:shadow-alpha01/shadowborn.git`. No remote change is necessary.
+no WireGuard server implementation. At that revision the documented `origin` was
+`git@github.com:shadow-alpha01/shadowborn.git`.
 The supplied AGENTS.md is included in the new repository; its old ignore rule
 was removed.
 

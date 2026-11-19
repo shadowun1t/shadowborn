@@ -1,6 +1,6 @@
 <div align="center">
   <img src="assets/shadow-mist-rounded-icon.png" width="300" alt="Shadowborn logo">
-  <h1>ShadowBorn</h1>
+  <h1>Shadowborn</h1>
   <p><strong>Your devices. Your server. Your Internet gateway.</strong></p>
   <p>WireGuard · Rust · nftables · Unbound · DNS over TLS</p>
   <p>
@@ -17,17 +17,17 @@ Internet traffic through a Linux VPS you control.** You authorize each device
 with its own keys, connect using a standard WireGuard client, and use the VPS as
 your Internet exit point.
 
-The Rust CLI prepares the gateway's configuration, manages device authorization
-before deployment, and produces protected server bundles and client profiles.
+The Rust CLI prepares the gateway's configuration, manages per-device authorization, and produces protected server bundles and client profiles.
 Packet forwarding runs through the Linux kernel, with nftables enforcing server
 isolation and Unbound providing DNS through the tunnel.
 
 > [!IMPORTANT]
-> **Development preview.** The current implementation supports offline
-> provisioning and a documented manual VM setup. Automated network activation,
-> administration of a running gateway, and the persistent strict client kill
-> switch are still unimplemented. Start with a disposable VM and the
-> [server setup guide](docs/installation-server.md).
+> **Gateway preview.** A fresh server can be activated with an independent rollback
+> timer. An administrator commits the deployment after testing DNS and egress
+> from an enrolled peer. Linux clients can separately install a persistent
+> firewall. The IPv4 gateway and strict client were exercised on Debian 13
+> and Ubuntu 24.04 x86_64 VMs. Start with a disposable VM and a working console. See the
+> [server guide](docs/installation-server.md) and [tested scope](docs/validation.md).
 
 ## How it works
 
@@ -68,16 +68,18 @@ best effort until their behavior has been tested.
 | **Domain/IP filtering** | Reviewed domain/hosts lists, DNS allow exceptions, private names and IPv4 egress CIDRs; no query/hit history. |
 | **Protected state** | Private files, exclusive locks, atomic writes, ownership checks and redacted diagnostics. |
 | **Backup and restore** | age-encrypted configuration backups; offline restore preserves current disabled and revoked authorizations. |
+| **Managed server** | Confirmed activation, timed rollback, boot recovery and live peer revocation. |
+| **Strict Linux client** | Separate file-only helper, console trial, persistent provider dependencies and current firewall inspection. |
 | **Packaging** | File-only installation, update and removal with ownership checks. Network activation is a separate operation. |
 
-Peer changes currently update **offline provisioning state**. Operations refuse a
-detected deployed gateway; changing a local record does not revoke credentials
-on a running server. Retire stale exported bundles after authorization changes.
+On a committed managed gateway, peer changes synchronize the protected state,
+running WireGuard peer set and firewall. Alternate state directories are for
+offline provisioning. Retire stale exported bundles after changing authorization.
 
-This preview provides **IPv4 Internet egress**. Generated client profiles route
-both address families into the tunnel, while the server blocks IPv6 forwarding.
-Routed IPv6 egress and persistent client protection remain unfinished. A standard
-profile does not guarantee that traffic stays blocked when the tunnel is down.
+The gateway supports IPv4 Internet egress. Its client profile includes both
+default routes and the server blocks IPv6 forwarding. The optional strict
+Linux client firewall covers both IP families during tunnel failure. A standard
+import alone allows direct traffic after WG stops.
 
 ## Getting started
 
@@ -113,7 +115,7 @@ endpoint, WAN interface and administrator CIDR before provisioning your server.
 The server runtime uses `wireguard-tools`, nftables, Unbound, CA certificates and
 systemd; encrypted exports and backups use age; QR exports use qrencode. The
 [installation guide](docs/installation-server.md) covers dependencies, private
-state initialization, console access, configuration review and manual VM activation.
+state initialization, console access, configuration review and managed activation.
 
 ### From a server plan to a connected device
 
@@ -123,10 +125,10 @@ state initialization, console access, configuration review and manual VM activat
    device and sending only its public key to the server administrator.
 3. **Authorize the device.** Initialize the gateway state, add the public key,
    and generate a server bundle and client template.
-4. **Review and activate in the VM.** Follow the server guide to install the
-   generated configuration and start the standard services.
+4. **Activate the fresh server.** Review `plan --host`, verify SSH and console
+   access, then start the bounded activation trial.
 5. **Import the client profile.** Transfer the profile securely, complete it on
-   the device, and verify the tunnel, Internet egress and DNS behavior.
+   the device, and verify the tunnel, Internet egress and DNS behavior. Commit each applicable trial.
 
 The [client enrollment guide](docs/client-enrollment.md) gives the exact key and
 profile workflow, including the optional encrypted convenience export. Linux
@@ -149,7 +151,7 @@ before using the profile on a working workstation.
 | Export a client template | `sudo shadowborn client profile --name laptop --output /root/laptop.template` |
 | Check domain/IP policy | `shadowborn --config config/server.example.toml policy check --input config/filtering.example.toml` |
 | Import offline policy | `sudo shadowborn policy import --input /root/filtering.toml --confirm` |
-| Revoke an offline authorization | `sudo shadowborn peer revoke --name laptop --confirm` |
+| Revoke an authorized device | `sudo shadowborn peer revoke --name laptop --confirm` |
 | Configure offline pinned DoH | `sudo shadowborn dns configure --stamp-file /root/upstream.stamp --confirm` |
 | Export client firewall for VM review | `sudo shadowborn client lockdown render --output /root/client-review` |
 | Inspect reported status | `shadowborn status` |
@@ -164,9 +166,12 @@ encrypted profile issuance, backup and offline restore. Use
 `shadowborn COMMAND --help` for their required arguments and the
 [recovery guide](docs/admin-recovery.md) for backup and restore boundaries.
 
-`apply --confirm` and `client lockdown enable` currently fail as unsupported.
-Status reports `UNKNOWN` or `NOT_TESTED` for runtime properties it cannot verify;
-a successful planning command is not evidence of a connected or protected client.
+Server activation uses `sudo shadowborn apply --console-verified --confirm`.
+The strict Linux client has its own
+[install, trial and commit procedure](docs/client-kill-switch.md). Current service,
+interface and firewall status can be inspected locally. Test DNS and HTTPS from
+the actual client before committing or reporting egress.
+
 
 ## Privacy and key custody
 
@@ -175,10 +180,11 @@ addresses and authorization state. It does not include browsing history, DNS
 query history, destination-flow history, handshake timelines or traffic counters.
 There is no telemetry, analytics collector or background activity recorder.
 
-Generated resolver configuration disables query/reply logging and periodic
-statistics. Generated service configuration suppresses stdout/stderr and core
-dumps. Runtime behavior through service failures and reboots still needs VM
-validation; the [no-logs policy](docs/no-logs-policy.md) defines the exact scope.
+The resolver disables query/reply logging and periodic statistics. Scoped
+WireGuard and Shadowborn service-process journal streams were empty in the
+Debian and Ubuntu VM tests through traffic, outages, revocation and reboot.
+The [no-logs policy](docs/no-logs-policy.md) describes the checks and which
+records remain under the control of the OS, network and provider.
 
 Each device has a distinct keypair and PSK. Device-generated private keys stay on
 the device in the preferred enrollment flow. The optional `peer issue` flow
@@ -205,10 +211,9 @@ rules, IPv4 NAT and return traffic, selected host/metadata/source-spoofing block
 and traffic loss after explicit kernel peer removal. They use synthetic addresses
 inside isolated namespaces.
 
-Full VM boot/recovery, real Internet egress, authenticated DoT failure cases,
-live durable revocation and strict client leak tests remain outstanding. No
-throughput benchmark has been published. The
-[validation matrix](docs/validation.md) records the evidence and remaining work.
+The [validation matrix](docs/validation.md) records namespace and systemd VM
+results, tested operating systems and the open hardware/provider release gates.
+Benchmarks and their topology belong in the [performance guide](docs/performance.md).
 
 ```bash
 # Build and test the Shadowborn packages.
@@ -233,13 +238,13 @@ an older installation.
 
 | Guide | Contents |
 | --- | --- |
-| [Server setup](docs/installation-server.md) | Fresh VM preparation, dependencies and manual activation. |
+| [Server setup](docs/installation-server.md) | Fresh VM preparation, dependencies, managed trial and commit. |
 | [Server + QR walkthrough](docs/quickstart-qr.md) | Prepare a gateway and first device, decrypt locally and scan. |
 | [Client enrollment](docs/client-enrollment.md) | Device keys, secure profile transfer and standard WireGuard import. |
 | [DNS privacy](docs/dns-privacy.md) | Resolver configuration, encrypted upstreams and validation limits. |
 | [Domain/IP filtering](docs/filtering.md) | Domain and hosts imports, exceptions, private names and IPv4 blocklists. |
 | [Mistborn coverage](docs/mistborn-parity.md) | Complete requested feature inventory, status and integration gates. |
-| [Client protection](docs/client-kill-switch.md) | Requirements for the unfinished persistent strict mode. |
+| [Client protection](docs/client-kill-switch.md) | Strict client trial, boot dependencies and console recovery. |
 | [Administration and recovery](docs/admin-recovery.md) | Backups, revocation, recovery and removal. |
 | [Security hardening](docs/security-hardening.md) | Host assumptions, permissions and service boundaries. |
 | [Performance](docs/performance.md) | Measurement plan and current benchmark status. |

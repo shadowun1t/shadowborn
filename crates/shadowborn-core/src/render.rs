@@ -43,7 +43,7 @@ pub fn plan(config: &crate::Config, state: Option<&State>) -> Result<Plan> {
     }
     Ok(Plan {
         schema_version: 1,
-        stage: "PROVISIONING_ONLY",
+        stage: "PLAN",
         network_mutations: false,
         interface: config.server.interface.clone(),
         wan_interface: config.server.wan_interface.clone(),
@@ -70,7 +70,8 @@ pub fn plan(config: &crate::Config, state: Option<&State>) -> Result<Plan> {
             .collect(),
         ipv6: "BLOCKED_ON_SERVER; CLIENT_ENFORCEMENT_NOT_VERIFIED",
         no_activity_logs: "CONFIGURED; RUNTIME_UNKNOWN",
-        live_apply: "UNSUPPORTED: timed rollback, reboot recovery and SSH gates not met",
+        live_apply:
+            "fresh Debian/Ubuntu systemd gateway; confirmed console and enrolled test peer required",
         files,
         required_operator_checks: vec![
             "WAN/default routes and tunnel subnet collisions",
@@ -143,7 +144,7 @@ delete table ip shadowborn_nat
 table inet shadowborn {{
   set peers {{ type ipv4_addr; {elements} }}
   set blocked_v4 {{ type ipv4_addr; flags interval; auto-merge; {blocked} }}
-  set forbidden {{ type ipv4_addr; flags interval; elements = {{ 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 }}; }}
+  set forbidden {{ type ipv4_addr; flags interval; elements = {{ 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 168.63.129.16, 172.16.0.0/12, 192.0.0.0/24, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 }}; }}
   chain vpn_input {{
     ip saddr @peers ip daddr {dns} udp dport 53 accept
     ip saddr @peers ip daddr {dns} tcp dport 53 accept
@@ -211,7 +212,7 @@ server:
     do-daemonize: no
     username: ""
     chroot: ""
-    directory: "/etc/shadowborn"
+    directory: "/etc/unbound"
     pidfile: ""
     verbosity: 0
     use-syslog: no
@@ -255,7 +256,19 @@ forward-zone:
     ))
 }
 pub fn client_template(state: &State, name: &str) -> Result<String> {
-    Ok(format!("# STANDARD profile; strict kill switch is NOT installed.\n# Replace PrivateKey locally; protect this PSK-bearing template as a secret.\n# IPv6 is routed into the tunnel and dropped at the IPv4-only server.\n{}", client_config(state, name, "<DEVICE_PRIVATE_KEY>")?))
+    linux_client_template(state, name, false)
+}
+
+pub fn linux_client_template(state: &State, name: &str, strict: bool) -> Result<String> {
+    let profile = client_config(state, name, "<DEVICE_PRIVATE_KEY>")?;
+    if strict {
+        return Ok(profile.replacen(
+            "[Interface]",
+            &format!("[Interface]\nFwMark = {}", crate::CLIENT_FWMARK),
+            1,
+        ));
+    }
+    Ok(format!("# STANDARD profile; strict kill switch is NOT installed.\n# Replace PrivateKey locally; protect this PSK-bearing template as a secret.\n# IPv6 is routed into the tunnel and dropped at the IPv4-only server.\n{profile}"))
 }
 
 /// Compact, complete profile for standard file import and QR encoding.
@@ -271,7 +284,14 @@ fn client_config(state: &State, name: &str, private: &str) -> Result<String> {
     if peer.status != PeerStatus::Active {
         bail!("client export requires an active peer")
     }
-    Ok(format!("[Interface]\nPrivateKey = {private}\nAddress = {}/32\nDNS = {}\n\n[Peer]\nPublicKey = {}\nPresharedKey = {}\nEndpoint = {}:{}\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n",peer.address,state.config.prefix()?.address,state.server_public_key,peer.psk.as_ref().ok_or_else(||anyhow::anyhow!("missing PSK"))?.expose(),state.config.server.endpoint,state.config.server.listen_port))
+    Ok(format!("[Interface]\nPrivateKey = {private}\nAddress = {}/32\nDNS = {}\n\n[Peer]\nPublicKey = {}\nPresharedKey = {}\nEndpoint = {}:{}\nAllowedIPs = 0.0.0.0/0, ::/0\n",peer.address,state.config.prefix()?.address,state.server_public_key,peer.psk.as_ref().ok_or_else(||anyhow::anyhow!("missing PSK"))?.expose(),state.config.server.endpoint,state.config.server.listen_port))
+}
+/// Set only on exported devices that must maintain an idle NAT mapping.
+pub fn with_nat_keepalive(mut profile: String, enabled: bool) -> String {
+    if enabled {
+        profile.push_str("PersistentKeepalive = 25\n");
+    }
+    profile
 }
 pub fn bundle(state: &State) -> Result<BTreeMap<String, String>> {
     state.validate()?;
@@ -293,7 +313,7 @@ pub fn bundle(state: &State) -> Result<BTreeMap<String, String>> {
             .into(),
     );
     files.insert("shadowborn-firewall.service".into(),format!("[Unit]\nDescription=Shadowborn owned server firewall\nBefore=wg-quick@{wg}.service\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/sbin/nft -f /etc/shadowborn/server.nft\nStandardOutput=null\nStandardError=null\nLimitCORE=0\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nCapabilityBoundingSet=CAP_NET_ADMIN\n\n[Install]\nWantedBy=multi-user.target\n"));
-    files.insert("shadowborn-dns.service".into(),format!("[Unit]\nDescription=Shadowborn VPN-only Unbound resolver\nRequires=wg-quick@{wg}.service\nAfter=wg-quick@{wg}.service\nBindsTo=wg-quick@{wg}.service\n\n[Service]\nType=simple\nUser=unbound\nGroup=unbound\nExecStart=/usr/sbin/unbound -d -c /etc/shadowborn/unbound.conf\nRestart=on-failure\nRestartSec=5\nStandardOutput=null\nStandardError=null\nLimitCORE=0\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nPrivateDevices=yes\nProtectKernelTunables=yes\nProtectKernelModules=yes\nProtectControlGroups=yes\nRestrictAddressFamilies=AF_INET AF_UNIX\nCapabilityBoundingSet=CAP_NET_BIND_SERVICE\nAmbientCapabilities=CAP_NET_BIND_SERVICE\n\n[Install]\nWantedBy=multi-user.target\n"));
+    files.insert("shadowborn-dns.service".into(),format!("[Unit]\nDescription=Shadowborn VPN-only Unbound resolver\nRequires=wg-quick@{wg}.service\nAfter=wg-quick@{wg}.service\nBindsTo=wg-quick@{wg}.service\nPartOf=wg-quick@{wg}.service\n\n[Service]\nType=simple\nUser=unbound\nGroup=unbound\nExecStart=/usr/sbin/unbound -d -c /etc/unbound/shadowborn.conf\nRestart=on-failure\nRestartSec=5\nStandardOutput=null\nStandardError=null\nLimitCORE=0\nNoNewPrivileges=yes\nProtectSystem=strict\nProtectHome=yes\nPrivateTmp=yes\nPrivateDevices=yes\nProtectKernelTunables=yes\nProtectKernelModules=yes\nProtectControlGroups=yes\nRestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK\nCapabilityBoundingSet=CAP_NET_BIND_SERVICE\nAmbientCapabilities=CAP_NET_BIND_SERVICE\n\n[Install]\nWantedBy=multi-user.target\n"));
     files.insert("wg-quick-shadowborn.conf".into(),"[Unit]\nRequires=shadowborn-firewall.service\nAfter=shadowborn-firewall.service\n\n[Service]\nStandardOutput=null\nStandardError=null\nLimitCORE=0\n".into());
     if state.config.addons.dnscrypt.is_some() {
         let unit = files

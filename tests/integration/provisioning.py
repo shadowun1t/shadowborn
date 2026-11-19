@@ -153,6 +153,9 @@ def main():
         cli('peer', 'add', '--name', 'duplicate', '--public-key', public, ok=False)
         cli('client', 'profile', '--name', 'synthetic', '--output', '/root/client.template')
         assert '<DEVICE_PRIVATE_KEY>' in (jail / 'root/client.template').read_text()
+        assert 'PersistentKeepalive' not in (jail / 'root/client.template').read_text()
+        cli('client', 'profile', '--strict', '--nat-keepalive', '--name', 'synthetic', '--output', '/root/nat.template')
+        assert 'PersistentKeepalive = 25' in (jail / 'root/nat.template').read_text()
         cli('render', '--output', '/root/review')
         cli('backup', '--recipient', recipient, '--output', '/root/backup.age')
         assert (jail / 'root/backup.age').read_bytes().startswith(b'age-encryption.org/')
@@ -163,10 +166,11 @@ def main():
         assert peers[0]['status'] == 'revoked'
         cli('client', 'profile', '--name', 'synthetic', '--output', '/root/revoked.template', ok=False)
         cli('peer', 'issue', '--name', 'convenience', '--recipient', recipient,
-            '--bundle', '/root/issued.age', '--accept-server-key-generation')
+            '--bundle', '/root/issued.age', '--nat-keepalive', '--accept-server-key-generation')
         encrypted = (jail / 'root/issued.age').read_bytes()
         decoded = subprocess.run([age, '-d', '-i', str(identity)], input=encrypted, capture_output=True, check=True).stdout
         assert b'<DEVICE_PRIVATE_KEY>' not in decoded and b'AllowedIPs = 0.0.0.0/0, ::/0' in decoded
+        assert b'PersistentKeepalive = 25' in decoded
         if qrencode:
             state_path = jail / 'var/lib/shadowborn/state.json'
             before = state_path.read_bytes()

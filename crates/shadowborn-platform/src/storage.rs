@@ -124,6 +124,12 @@ pub struct Store {
 }
 impl Store {
     pub fn open(path: &Path, create: bool) -> Result<Self> {
+        Self::open_lock(path, create, false)
+    }
+    pub(crate) fn wait(path: &Path) -> Result<Self> {
+        Self::open_lock(path, false, true)
+    }
+    fn open_lock(path: &Path, create: bool, wait: bool) -> Result<Self> {
         if create && fs::symlink_metadata(path).is_err() {
             create_private(path)?;
         }
@@ -140,8 +146,12 @@ impl Store {
         if !m.is_file() || m.uid() != uid() || m.mode() & 0o077 != 0 || m.nlink() != 1 {
             bail!("unsafe lock file")
         }
-        lock.try_lock_exclusive()
-            .context("another provisioning operation holds the lock")?;
+        if wait {
+            fs2::FileExt::lock_exclusive(&lock)?;
+        } else {
+            lock.try_lock_exclusive()
+                .context("another provisioning operation holds the lock")?;
+        }
         Ok(Self {
             path: path.to_path_buf(),
             _lock: lock,

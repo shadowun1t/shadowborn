@@ -1,9 +1,9 @@
 # Prepare a server and connect by QR
 
-This preview prepares all files for a **fresh disposable VPS VM** in one command.
-Activation is still manual: automatic apply/rollback, live peer administration
-and persistent strict client protection are unfinished. No command below changes
-your laptop's firewall, routes or DNS. Do not deploy the server on that laptop.
+This walkthrough prepares the server and first device for a **fresh VPS VM**.
+The gateway starts in a timed trial. Commit it after a real device confirms
+its DNS and exit address. Install the server role only on the dedicated VM.
+A Linux workstation can separately use the [strict client guide](client-kill-switch.md).
 
 ## 1. Keep the export decryption key on the operator's computer
 
@@ -89,16 +89,33 @@ sudo shadowborn --config /root/shadowborn-prepared/config.toml \
 sudo shadowborn --state-dir /root/shadowborn-prepared/state peer list
 ```
 
-Follow [manual VM activation](installation-server.md#manual-activation-in-a-disposable-vm),
-using `/root/shadowborn-prepared/server` wherever that recipe says
-`/root/shadowborn-review`. First verify console access, SSH allowlist/port, subnet
-collisions, existing firewalls, resolver bindings and provider UDP firewall.
-Keep using the explicit config/state paths; do not keep two independently mutable
-state copies. Existing gateways must not be reinitialized with `setup`.
+For managed activation on a fresh server, move the prepared configuration and
+the complete private state directory into their canonical locations. These
+commands stop on an existing destination. The state move preserves the first
+device and the server identity.
 
-Additional devices must be enrolled **before activation** with `peer add` or
-`peer issue`, then `render` into a new review directory. Live enrollment/revoke
-is still unsupported. Never reuse the phone's profile for another device.
+```bash
+sudo sh -eu -c '
+  prepared=/root/shadowborn-prepared
+  for path in /etc/shadowborn/config.toml /var/lib/shadowborn; do
+    test ! -e "$path" && test ! -L "$path" || exit 1
+  done
+  mkdir -p -m 0755 /etc/shadowborn
+  mv -nT "$prepared/config.toml" /etc/shadowborn/config.toml
+  test ! -e "$prepared/config.toml"
+  mv -nT "$prepared/state" /var/lib/shadowborn
+  test ! -e "$prepared/state"
+'
+sudo shadowborn plan --host --json
+```
+
+Have the phone and verified server console ready. Start `sudo shadowborn apply
+--console-verified --confirm`, activate the profile, test DNS and HTTPS through
+the gateway, then run `sudo shadowborn deployment commit --transaction SERVER_ID
+--peer phone --egress-verified --confirm`. The pending window is 120 seconds.
+The [server guide](installation-server.md) covers SSH and provider firewall
+checks. Additional devices can be enrolled on the committed managed gateway.
+Issue a distinct profile for each device.
 
 ## 4. Scan on the trusted computer
 

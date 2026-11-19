@@ -1,5 +1,51 @@
 # Shadowborn validation
 
+## Managed gateway and strict Linux client, 2026-11-19
+
+Baseline `599701f` was clean and all 77 existing Rust tests passed. The current
+workspace has 78 passing Rust tests. Live network and service changes for these
+checks ran only inside disposable guests or guarded namespaces.
+
+| x86_64 server and client guests | Kernel | WireGuard tools | nftables | Unbound | systemd |
+| --- | --- | --- | --- | --- | --- |
+| Debian GNU/Linux 13, trixie | 6.12.117+deb13-cloud-amd64 | 1.0.20210914-3 | 1.1.3 | 1.26.2 | 257.13 |
+| Ubuntu 24.04.5 LTS | 6.8.0-147-generic | 1.0.20210914-1ubuntu4 | 1.0.9 | 1.19.2 | 255.4 |
+
+Both pairs used KVM, the real file installers, kernel WireGuard, wg-quick,
+systemd-networkd and systemd-resolved's resolvconf integration. An independent
+HTTPS origin and authenticated TLS DNS upstream ran in a third namespace.
+The LAN used private QEMU sockets. Guests disconnected their package-download
+NIC before testing. All IP addresses, names and credentials were invented for the lab.
+
+| Check | Executed result |
+| --- | --- |
+| Enrollment and egress | PASS on both pairs. The client kept its private key. The HTTPS origin observed the client's WAN address before activation and the gateway WAN address after activation. A real pinned-key SSH session from the configured admin range worked through the change. |
+| DNS | PASS. The client used tunnel-side Unbound, which reached an authenticated synthetic DoT upstream. WAN recursion was denied. A stopped resolver failed DNS while address-pinned HTTPS still used the gateway. Namespace tests also rejected an invalid upstream TLS identity and exercised the optional pinned DoH adapter. |
+| Packet observation | PASS. The client WAN and independent server ingress saw the permitted outer UDP during the positive control. The WG device carried the inner HTTPS traffic. With WG removed, attempted HTTPS and physical TCP/UDP DNS over both IP families produced no bypass packet in the observation windows. The independent WAN capture lasted seven seconds per condition. |
+| Strict client boot and sleep | PASS. WG stop/start left the firewall in place. An invalid firewall template prevented networkd and WG startup after reboot. Repair from the console restored the tunnel. QEMU ACPI suspend/wake retained the firewall and recovered usable WG routing. A wrong PSK, a different client key and a changed endpoint each prevented egress. |
+| Alternate link and LAN exception | PASS in namespaces for a live WG peer moving to a second veth uplink with direct fallback blocked. In both systemd VM pairs an approved on-link HTTP(S) exception reported `NOT_STRICT`, expired in the kernel and blocked direct access again. |
+| Isolation | PASS in namespaces. Two authorized devices independently reached the origin. Peer-to-peer, forbidden sources, metadata and host-management traffic were denied. Unrelated nft tables survived owned-table replacement. |
+| Rollback and removal | PASS for unattended 120-second server and client trials and pending trials interrupted by a reboot on either machine. Forwarding and direct access returned to baseline and unrelated tables survived. File-only update and uninstall on both roles preserved the gateway's revocations and the client's protected profile. |
+| Authorization after failure | PASS. Simulated process loss immediately after canonical authorization replacement triggered independent reconciliation. A revoked device lost access immediately and stayed absent after service restart, repeated revocation and gateway reboot. Restoring an older backup also preserves existing revocations and PSK rotation in the state tests. |
+| Project-owned activity records | PASS in the tested configurations. Scoped service-process journal streams were empty through traffic, failures, revocation and reboot. The tests checked project state/configuration, inspected log/cache paths and found no test query in the inspected owned files. The OS manager recorded service lifecycle separately. See the [no-logs policy](no-logs-policy.md). |
+| Build and regression | PASS. Rust format, Clippy with warnings denied, release build, CLI, encrypted QR decode, packaging, 10 legacy integration checks, both namespace suites and ShellCheck. OSV returned zero advisory matches for 62 locked registry dependencies on this date. |
+| aarch64 user space | PASS. Cross-compiled the full workspace for `aarch64-unknown-linux-gnu`. All 78 tests ran through `qemu-aarch64` with a distribution arm64 sysroot. The release CLI validated the sample configuration and produced a read-only plan. This used the x86_64 host kernel. |
+| Rust dependency inventory | PASS. The generated CycloneDX SBOM contained the exact names and versions of all 69 Cargo.lock packages. See the [inventory command](licensing.md). |
+
+**Reproduce** with `scripts/validate.sh`, `python3 scripts/audit-lock.py` and
+the [two-VM acceptance procedure](../tests/vm/README.md). The
+[performance results](performance.md) use the same private topology.
+
+**Open release gates.** Public VPS UDP reachability, Internet exit IP and real
+Quad9 reachability from the chosen provider need an authorized external device.
+The physical laptop's Wi-Fi, DHCP, suspend and any NetworkManager/Shadow Mist
+coexistence are unverified. Native routed IPv6 and IPv6-only WAN bootstrap are
+unsupported. The implemented profile blocks IPv6. Whole-machine aarch64 boot
+and packet tests, disaster recovery after loss of the canonical revocation
+state, release signing and license provenance remain open. No production or
+whole-host no-history certification is implied. Entries below describe the
+older revisions on their indicated dates.
+
 ## Repair and executable DNS/client checks — 2026-11-15
 
 Baseline: `5f72f29` plus unfinished edits to core config/render and Cargo files;

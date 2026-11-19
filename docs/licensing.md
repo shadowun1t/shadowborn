@@ -19,4 +19,17 @@ AGPL-3.0-only versus -or-later is inferred solely from a stock license text.
 No Mistborn code/configuration was copied. New code uses this workspace's existing
 Rust dependencies and standard upstream tools. Their individual license notices
 remain applicable; Cargo.lock is preserved and extended only for new local crates.
-A complete third-party attribution/SBOM and dependency audit remain release work.
+The locked Rust registry dependencies are checked against OSV. For an inventory
+of the Rust workspace, build the release and run Syft from the repository root.
+
+```bash
+SYFT_CHECK_FOR_APP_UPDATE=false SYFT_FILE_METADATA_SELECTION=none \
+  syft scan file:Cargo.lock --source-name shadowborn-rust-workspace \
+    --override-default-catalogers rust-cargo-lock-cataloger -q \
+    -o cyclonedx-json=target/release/shadowborn-rust.cdx.json
+```
+
+Syft 1.54.1 produced a CycloneDX inventory containing all seven local crates and
+all 62 registry package versions in the tested lockfile. It reads Cargo.lock
+only. Full third-party attribution and the native packages, kernel and images
+of a particular deployment require their own release inventory and review.

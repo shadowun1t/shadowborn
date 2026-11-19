@@ -9,7 +9,13 @@ pub struct Enrollment {
 
 /// Mutate only the caller's uncommitted state. Failure must never authorize a peer.
 /// The client private key is deliberately not part of persistent State.
-pub fn issue(state: &mut State, name: &str, recipient: &str, qr: bool) -> Result<Enrollment> {
+pub fn issue(
+    state: &mut State,
+    name: &str,
+    recipient: &str,
+    qr: bool,
+    nat_keepalive: bool,
+) -> Result<Enrollment> {
     crate::validate_recipient(recipient)?;
     state.validate()?;
     if !valid_name(name) || state.peers.iter().any(|p| p.name == name) {
@@ -22,7 +28,10 @@ pub fn issue(state: &mut State, name: &str, recipient: &str, qr: bool) -> Result
         crate::public_key(&private)?,
         crate::generate_key(true)?,
     )?;
-    let profile = shadowborn_core::client_profile(&proposed, name, &private)?;
+    let profile = shadowborn_core::with_nat_keepalive(
+        shadowborn_core::client_profile(&proposed, name, &private)?,
+        nat_keepalive,
+    );
     let encrypted = Enrollment {
         profile: crate::encrypt(recipient, profile.as_bytes())?,
         qr: if qr {

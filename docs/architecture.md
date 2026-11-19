@@ -16,12 +16,12 @@ in [legacy/architecture.md](legacy/architecture.md).
 - Existing `shadowmist-*` crates remain independent; server installation selects
   only the Shadowborn executable and documentation.
 
-The single protected state.json is the canonical offline authorization state.
+The single protected state.json is the canonical authorization state.
 It stores no timestamps, counters, endpoints observed from peers or activity.
 A change replaces one file atomically after validating and comparing the old
 state. Revoked entries retain only identity/address tombstones; their PSK is
-removed. Lock contention and stale state fail closed. This transaction manages
-files, not kernel networking. Exported bundles are immutable review artifacts,
+removed. Lock contention and stale state fail closed. On a managed gateway a systemd path unit also schedules
+reconciliation after canonical authorization changes. Exported bundles are immutable review artifacts,
 not another canonical database; retire stale bundles after authorization changes.
 
 The optional filtering section stores only operator-selected domains, exceptions,
@@ -38,7 +38,7 @@ individual source /32 AllowedIPs. The firewall denies peer access to server
 management, other peers, private/CGNAT/link-local/multicast destinations and
 cloud metadata. Tunnel-only DNS is the sole allowed host service. IPv6 forwarding
 is dropped. There is no global firewall flush. Owned table replacement is an
-atomic nft batch, but initial ownership/collision checks remain manual in a VM.
+atomic nft batch, and the managed installer checks for collisions before activation.
 
 The generated WG systemd drop-in requires firewall startup first; stopping WG
 does not remove firewall tables. Unbound runs as its package user, binds the
@@ -46,7 +46,8 @@ VPN IPv4 address and forwards to pinned Quad9 DoT endpoints. No custom server
 monitor or persistent client daemon exists. DNS local DNSSEC validation and
 routed IPv6 are not implemented in this preview.
 
-Automated live apply, kernel/config synchronization, live revoke, timed network
-rollback and reboot recovery are not implemented. Commands reject these paths
-instead of presenting file staging as live protection. Phase 1 remains partial;
-Phase 2 strict client and Phase 3 VM acceptance remain release gates.
+Managed activation adds a bounded worker, boot recovery, guarded firewall load and
+authorization reconciliation to the standard WG unit. Explicit commit requires
+an enrolled test peer. The separate client helper installs an nft output policy
+and provider startup dependencies after a console trial. See the [validation
+matrix](validation.md) for the measured scope.

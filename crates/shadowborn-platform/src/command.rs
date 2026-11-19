@@ -22,6 +22,8 @@ pub fn run(program: &str, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {
         "sysctl",
         "unbound-checkconf",
         "ss",
+        "wg-quick",
+        "sha256sum",
     ]
     .contains(&program)
     {

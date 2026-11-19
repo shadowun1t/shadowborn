@@ -100,7 +100,7 @@ def exercise_dns_policy(base, bundle, server, client, ns, run):
     thread.start()
     # Relocate ONLY lab directory, CA and upstream fixture addresses. Keep the
     # generated ACL, TLS authentication, filtering and no-log directives intact.
-    text = (bundle / 'unbound.conf').read_text().replace('directory: "/etc/shadowborn"', f'directory: "{base}"')
+    text = (bundle / 'unbound.conf').read_text().replace('directory: "/etc/unbound"', f'directory: "{base}"')
     text = text.replace('/etc/ssl/certs/ca-certificates.crt', str(cert))
     text = text.replace('9.9.9.9@853', '198.18.0.53@853').replace('149.112.112.112@853', '198.18.0.53@853')
     config = base / 'resolver-lab.conf'

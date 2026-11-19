@@ -16,7 +16,7 @@ wg genkey > privatekey
 wg pubkey < privatekey > publickey
 ```
 
-Before VM activation, authorize that public key using `sudo shadowborn peer add
+On an initialized or committed gateway, authorize that public key using `sudo shadowborn peer add
 --name laptop --public-key DEVICE_PUBLIC_KEY`. The server assigns a unique /32
 and generates a separate PSK. `peer export-public --name laptop` outputs public
 configuration; `peer show --name laptop --redacted` hides keys. `peer list` has
@@ -26,7 +26,8 @@ Export `sudo shadowborn client profile --name laptop --output /root/laptop.templ
 Transfer the PSK-bearing template using authenticated encrypted transport or
 an encrypted removable medium. Replace `<DEVICE_PRIVATE_KEY>` on the device with
 its own private key using a local editor, without printing keys. The result is a
-standard wg-quick config. Protect directory/file permissions as 0700/0600.
+standard wg-quick config. Select `--nat-keepalive` on profile export or issue
+for a device that needs a 25-second idle NAT keepalive. Protect directory/file permissions as 0700/0600.
 
 Optional convenience: `sudo shadowborn peer issue --name laptop --recipient
 AGE_RECIPIENT --bundle /root/laptop.conf.age --accept-server-key-generation`.
@@ -53,8 +54,8 @@ private keys are not retained in authorization state, so QR regeneration from
 that state is deliberately unavailable. Keep the encrypted original as needed.
 
 For a gateway prepared with `setup`, add `--state-dir /root/shadowborn-prepared/state`
-to the command. All enrollment remains offline: add devices and render a fresh
-server bundle **before** activation. Follow the walkthrough to transfer, decrypt
+to the command. This alternate state directory supports offline enrollment. A committed managed
+gateway uses the canonical state directory for live administration. Follow the walkthrough to transfer, decrypt
 and display the QR locally, then scan in a standard WireGuard app. No web
 dashboard or shareable enrollment token is involved. Phone app acceptance is
 NOT TESTED; independent QR decode checks are not a substitute for that test.
@@ -75,10 +76,11 @@ working laptop DNS implicitly. Use a pinned endpoint to avoid DNS bootstrap.
 Both default address families route into the tunnel. This preview has IPv4-only
 server egress; IPv6 is intentionally unavailable through it. **Standard mode has
 no persistent kill switch**: stopping WG, resolver fallback or competing routing
-can expose direct traffic. `client lockdown enable` is unsupported. Non-Linux WG
-apps are best effort with no strict guarantee.
+can expose direct traffic. For persistent enforcement, follow the
+[strict Linux client procedure](client-kill-switch.md) before starting WG.
+Other WG applications have their own platform-specific behavior.
 
-All peer mutations currently operate before deployment. A detected live/installed
-gateway is rejected. For urgent revocation on the manual VM, use the console and
-stop the tunnel until both kernel and persistent config have been updated; see
-admin-recovery.md. Never assume a changed offline state invalidates old bundles.
+On a committed managed gateway, `sudo shadowborn peer revoke --name laptop
+--confirm` updates canonical state, the WG configuration, the kernel peer set
+and the firewall. On a manually installed gateway follow the console procedure
+in [administration and recovery](admin-recovery.md).

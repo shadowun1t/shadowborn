@@ -1,18 +1,49 @@
 # Administration and recovery
 
-This preview provides protected file transactions, not a live network transaction
-engine. `apply --confirm`, strict activation and automatic live gateway removal
-fail with UNSUPPORTED. Do not deploy over SSH relying on a rollback timer that
-does not exist. A disposable VM snapshot plus verified console is the manual
-lab recovery boundary. Network timed rollback, crash/reboot recovery and live
-revocation are explicit remaining Phase 1 gates.
+## Managed gateways
 
-## Offline authorization and backups
+`deployment status` reads the current transaction. A pending apply arms a
+120-second systemd timer. Reboot recovery runs before reconciliation. Lost SSH
+or an expired trial can be diagnosed from the previously verified console.
 
-`peer disable/revoke/rotate-psk --name NAME --confirm` requires root, exclusive
-locking and an undeployed gateway. Changes atomically replace state.json after
-comparison with the planned old value. Revoked keys/names/addresses stay reserved;
-PSKs are deleted from current state. Previously exported copies are not erased.
+```bash
+sudo shadowborn status
+sudo shadowborn deployment status
+sudo shadowborn deployment recover
+```
+
+An explicit recovery reverts a pending deployment. On a committed gateway use
+`deployment reconcile` after a partial peer change. The protected canonical
+authorization file drives the WG config, running peer set and nft address set.
+A changed owned file or live firewall stops the operation for console review.
+On a compromised device, revoke its identity and enroll fresh keys. Old bundles
+and decrypted profile copies remain under the operator's custody.
+
+For an on-demand diagnosis, the local root console can inspect current kernel
+fields with `wg show wg-shadowborn latest-handshakes` and
+`wg show wg-shadowborn transfer`. They display peer public keys alongside
+current handshake times or byte totals. Keep the output on that console.
+The gateway takes no samples, schedules no collection and writes no history.
+Use a real enrolled client and an owned HTTPS origin to check DNS and the exit
+address independently.
+
+To remove a managed deployment, verify the console and run:
+
+```bash
+sudo shadowborn uninstall --plan
+sudo shadowborn deployment remove --console-verified --confirm
+sudo ./scripts/uninstall-server.sh
+```
+
+Removal checks file/table ownership, stops and disables the managed services,
+and restores the recorded forwarding baseline. Canonical secrets, configuration
+and revocations stay in place. To update the file-only package, use the same
+teardown followed by `update-server.sh`, review the new plan and activate again.
+
+## Offline restore and encrypted backups
+
+Backups contain necessary configuration and credentials. A disabled/revoked
+identity stays restricted when restoring an older backup to the same gateway.
 
 ```bash
 sudo shadowborn backup --recipient AGE_RECIPIENT --output /root/gateway.age

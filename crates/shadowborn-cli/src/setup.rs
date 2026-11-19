@@ -7,6 +7,9 @@ use std::{fs, net::Ipv4Addr, path::PathBuf};
 /// Prepare a fresh gateway and first device in a private directory; no activation.
 #[derive(Args)]
 pub struct Setup {
+    /// Maintain the first device's idle NAT mapping (25 seconds).
+    #[arg(long)]
+    nat_keepalive: bool,
     #[arg(long)]
     endpoint: Ipv4Addr,
     #[arg(long)]
@@ -86,7 +89,13 @@ impl Setup {
                 server_private_key: private,
                 peers: vec![],
             };
-            let enrollment = platform::issue(&mut state, &self.name, &self.recipient, true)?;
+            let enrollment = platform::issue(
+                &mut state,
+                &self.name,
+                &self.recipient,
+                true,
+                self.nat_keepalive,
+            )?;
             platform::write_new_secret(
                 &self.output.join("config.toml"),
                 toml::to_string_pretty(&state.config)?.as_bytes(),
@@ -107,7 +116,7 @@ impl Setup {
                 b"PROVISIONING ONLY: networking has NOT been activated.\n\
                 Review config.toml and server/ using docs/installation-server.md.\n\
                 Keep this directory root-only and outside Git/backups without encryption.\n\
-                Before manual VM activation, install config.toml and the state directory\n\
+                Before managed gateway activation, install config.toml and the state directory\n\
                 at /etc/shadowborn/config.toml and /var/lib/shadowborn respectively,\n\
                 only if those destinations do not already exist. Do not run init again.\n\
                 Alternatively pass --config OUTPUT/config.toml --state-dir OUTPUT/state\n\
@@ -117,7 +126,7 @@ impl Setup {
                 Both imports authorize the SAME device. Issue a new peer per device.\n\
                 QR is a secret: no public decoder, screenshots, terminal output or web UI.\n\
                 STANDARD client only: no persistent kill switch; IPv6 egress blocked.\n\
-                Live apply/revoke, strict client and runtime no-log VM gates are unfinished.\n",
+                Use the managed activation and separate client instructions; see docs/validation.md for tested scope.\n",
             )?;
             Ok(())
         })();

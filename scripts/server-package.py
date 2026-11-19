@@ -18,6 +18,7 @@ FILES = {
     'usr/local/share/doc/shadowborn/LICENSE': ('LICENSE', 0o644),
     'usr/local/share/doc/shadowborn/server.example.toml': ('config/server.example.toml', 0o644),
     'usr/local/share/doc/shadowborn/filtering.example.toml': ('config/filtering.example.toml', 0o644),
+    'usr/local/share/doc/shadowborn/tests/vm/README.md': ('tests/vm/README.md', 0o644),
 }
 # Preserve the repository's relative documentation links in the installed copy.
 # Legacy guides are documentation only; no legacy binaries/services are installed.
@@ -26,7 +27,12 @@ FILES['usr/local/share/doc/shadowborn/assets/shadow-mist-rounded-icon.png'] = (
 for source in sorted((ROOT / 'docs').rglob('*.md')):
     relative = source.relative_to(ROOT).as_posix()
     FILES[f'usr/local/share/doc/shadowborn/{relative}'] = (relative, 0o644)
-MANIFEST = 'var/lib/shadowborn-package/manifest.json'
+CLIENT_FILES = {
+    'usr/local/bin/shadowborn-client-lockdown': ('packaging/client/lockdown.py', 0o755),
+    'usr/local/share/shadowborn-client/lockdown.nft.in': ('packaging/client/lockdown.nft.in', 0o644),
+    'usr/local/share/shadowborn-client/shadowborn-client-lockdown.service': (
+        'packaging/client/shadowborn-client-lockdown.service', 0o644),
+}
 
 
 def digest(data):
@@ -92,21 +98,27 @@ def main():
     parser.add_argument('action', choices=('install', 'update', 'uninstall'))
     parser.add_argument('--destdir', type=Path)
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--client', action='store_true', help='separate client firewall helper package')
     args = parser.parse_args()
+    files = CLIENT_FILES if args.client else FILES
+    package = 'shadowborn-client' if args.client else 'shadowborn'
     prefix = args.destdir or Path('/')
     if not prefix.is_absolute() or '..' in prefix.parts:
         raise RuntimeError('Absolute normalized destdir required')
     if args.dry_run:
         print(f'{args.action}: owned CLI/documentation files only; networking/configuration/keys/services untouched')
-        for name in FILES:
+        for name in files:
             print(prefix / name)
         return
     if prefix == Path('/') and os.geteuid() != 0:
         raise RuntimeError('Host file installation requires root')
-    if prefix == Path('/') and Path('/etc/systemd/system/shadowborn-firewall.service').exists():
+    if args.client and (prefix / 'etc/shadowborn-client/state.json').exists():
+        raise RuntimeError('Disable the owned client firewall before replacing its helper')
+    if not args.client and prefix == Path('/') and (Path('/etc/systemd/system/shadowborn-firewall.service').exists()
+                                                    or Path('/var/lib/shadowborn/deployment.json').exists()):
         raise RuntimeError('Deployed gateway found: package updates/uninstall require manual review')
     safe_path(prefix)
-    manifest = prefix / MANIFEST
+    manifest = prefix / f'var/lib/{package}-package/manifest.json'
     safe_path(manifest)
     ensure_dir(manifest.parent, mode=0o700)
     lock_path = manifest.parent / 'lock'
@@ -116,14 +128,14 @@ def main():
         if (manifest.parent / 'pending').exists():
             raise RuntimeError('Interrupted packaging transaction: inspect pending/ backups before retry')
         previous = json.loads(manifest.read_text()) if manifest.exists() else {}
-        if any(name not in FILES for name in previous):
+        if any(name not in files for name in previous):
             raise RuntimeError('Invalid ownership manifest')
         if args.action in ('update', 'uninstall') and not previous:
             raise RuntimeError('No owned installation found')
         if args.action == 'install' and previous:
             raise RuntimeError('Already installed; use update')
         content = {}
-        for name, (source, mode) in FILES.items():
+        for name, (source, mode) in files.items():
             target = prefix / name
             safe_path(target)
             if target.exists() and (not target.is_file() or name not in previous or digest(target.read_bytes()) != previous[name]):
