@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/shadow-mist-rounded-icon.png" width="104" alt="">
+  <img src="assets/shadow-mist-rounded-icon.png" width="300" alt="">
   <h1>Shadowborn</h1>
 </div>
 
